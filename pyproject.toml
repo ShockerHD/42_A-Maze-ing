@@ -3,7 +3,9 @@ name = "a-maze-ing"
 version = "0.0.1"
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = []
+dependencies = [
+    "pydantic>=2",
+]
 
 [dependency-groups]
 dev = [
@@ -13,3 +15,8 @@ dev = [
 
 [tool.uv]
 package = false
+
+[tool.mypy]
+# `mypy .` is fixed by the subject, so keep the exclusions here.
+exclude = '(^|/)(\.venv|build|dist|mlx_CLXV)(/|$)'
+plugins = ["pydantic.mypy"]
