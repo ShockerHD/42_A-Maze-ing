@@ -1,0 +1,15 @@
+[project]
+name = "a-maze-ing"
+version = "0.0.1"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "flake8",
+    "mypy",
+]
+
+[tool.uv]
+package = false
