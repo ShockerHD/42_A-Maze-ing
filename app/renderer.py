@@ -11,6 +11,7 @@ WIDTH = 1280
 HEIGHT = 720
 MARGIN = 40
 WALL = 6
+CELL = 60
 
 EVENT_CLIENT_MESSAGE = 33  # X11 ClientMessage -> WM close button
 KEY_ESC = 65307  # XK_Escape: the backend reports keysyms, not raw keycodes
@@ -18,6 +19,7 @@ KEY_ESC = 65307  # XK_Escape: the backend reports keysyms, not raw keycodes
 COLOR_BG = 0xFF1E1E28
 COLOR_WALL = 0xFFE0E0E8
 COLOR_FLOOR = 0xFF2A2A38
+COLOR_CELL = 0xFF4CAF50
 
 
 class Renderer:
@@ -50,13 +52,18 @@ class Renderer:
             self.frame[start:start + len(row)] = row
 
     def paint(self) -> None:
-        """A wall-coloured square with the floor showing through inside."""
+        """The outer square, plus two test cells to check placement."""
         self.clear(COLOR_BG)
         x, y, side = self.origin_x, self.origin_y, self.side
         self.fill_rect(x, y, side, side, COLOR_WALL)
         self.fill_rect(
             x + WALL, y + WALL, side - 2 * WALL, side - 2 * WALL, COLOR_FLOOR
         )
+        # Top-left cell: tucked against the inside of the wall.
+        self.fill_rect(x + WALL, y + WALL, CELL, CELL, COLOR_CELL)
+        # Centre cell: same centre as the square itself.
+        middle = (side - CELL) // 2
+        self.fill_rect(x + middle, y + middle, CELL, CELL, COLOR_CELL)
         self.buf[:] = self.frame
 
     def on_expose(self, _param: object) -> None:
