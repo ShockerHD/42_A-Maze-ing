@@ -19,7 +19,6 @@ KEY_ESC = 65307  # XK_Escape: the backend reports keysyms, not raw keycodes
 COLOR_BG = 0xFF1E1E28
 COLOR_WALL = 0xFFE0E0E8
 COLOR_FLOOR = 0xFF2A2A38
-COLOR_CELL = 0xFF4CAF50
 
 
 class Renderer:
@@ -60,11 +59,18 @@ class Renderer:
             x + WALL, y + WALL, side - 2 * WALL, side - 2 * WALL, COLOR_FLOOR
         )
         # Top-left cell: tucked against the inside of the wall.
-        self.fill_rect(x + WALL, y + WALL, CELL, CELL, COLOR_CELL)
+        self.draw_cell(x + WALL, y + WALL)
         # Centre cell: same centre as the square itself.
         middle = (side - CELL) // 2
-        self.fill_rect(x + middle, y + middle, CELL, CELL, COLOR_CELL)
+        self.draw_cell(x + middle, y + middle)
         self.buf[:] = self.frame
+
+    def draw_cell(self, x: int, y: int) -> None:
+        """One cell: walls all round, floor showing through the middle."""
+        self.fill_rect(x, y, CELL, CELL, COLOR_WALL)
+        self.fill_rect(
+            x + WALL, y + WALL, CELL - 2 * WALL, CELL - 2 * WALL, COLOR_FLOOR
+        )
 
     def on_expose(self, _param: object) -> None:
         # The first paint has to reach the window from inside the loop.
