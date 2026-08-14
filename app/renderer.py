@@ -15,12 +15,18 @@ WALL = 6
 COLS = 13
 ROWS = 13
 
+# Hardcoded until the config is wired in. (col, row), 0-based.
+ENTRY = (0, 0)
+EXIT = (COLS - 1, ROWS - 1)
+
 EVENT_CLIENT_MESSAGE = 33  # X11 ClientMessage -> WM close button
 KEY_ESC = 65307  # XK_Escape: the backend reports keysyms, not raw keycodes
 
 COLOR_BG = 0xFF1E1E28
 COLOR_WALL = 0xFFE0E0E8
 COLOR_FLOOR = 0xFF2A2A38
+COLOR_ENTRY = 0xFF4CAF50
+COLOR_EXIT = 0xFFE05252
 
 
 class Renderer:
@@ -71,7 +77,17 @@ class Renderer:
         for row in range(ROWS):
             for col in range(COLS):
                 self.draw_cell(col, row)
+        # Painted after the grid so the walls around them stay untouched.
+        self.fill_floor(*ENTRY, COLOR_ENTRY)
+        self.fill_floor(*EXIT, COLOR_EXIT)
         self.buf[:] = self.frame
+
+    def fill_floor(self, col: int, row: int, color: int) -> None:
+        """Recolour a cell's floor, leaving its four walls as they are."""
+        x = self.origin_x + WALL + col * self.cell
+        y = self.origin_y + WALL + row * self.cell
+        inner = self.cell - 2 * WALL
+        self.fill_rect(x + WALL, y + WALL, inner, inner, color)
 
     def draw_cell(self, col: int, row: int) -> None:
         """One cell: walls all round, floor showing through the middle."""
