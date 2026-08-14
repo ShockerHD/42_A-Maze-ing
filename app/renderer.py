@@ -11,7 +11,9 @@ WIDTH = 1280
 HEIGHT = 720
 MARGIN = 40
 WALL = 6
-CELL = 60
+
+COLS = 13
+ROWS = 13
 
 EVENT_CLIENT_MESSAGE = 33  # X11 ClientMessage -> WM close button
 KEY_ESC = 65307  # XK_Escape: the backend reports keysyms, not raw keycodes
@@ -33,10 +35,18 @@ class Renderer:
             raise SystemExit(f"expected 32 bpp, got {self.bpp}")
         self.px_bytes = self.bpp // 8
         self.frame = bytearray(self.size_line * HEIGHT)
-        # Largest square that fits the window, centred.
-        self.side = min(WIDTH, HEIGHT) - 2 * MARGIN
-        self.origin_x = (WIDTH - self.side) // 2
-        self.origin_y = (HEIGHT - self.side) // 2
+        # Cell size derived from the grid, so the cells tile the square
+        # exactly instead of leaving a remainder.
+        room = min(WIDTH, HEIGHT) - 2 * MARGIN - 2 * WALL
+        self.cell = room // max(COLS, ROWS)
+        if self.cell < 3:
+            raise SystemExit(f"{COLS}x{ROWS} is too large for this window")
+        self.grid_w = self.cell * COLS
+        self.grid_h = self.cell * ROWS
+        self.side_w = self.grid_w + 2 * WALL
+        self.side_h = self.grid_h + 2 * WALL
+        self.origin_x = (WIDTH - self.side_w) // 2
+        self.origin_y = (HEIGHT - self.side_h) // 2
 
     def clear(self, color: int) -> None:
         """Repaint the whole frame in one slice assignment."""
@@ -51,25 +61,26 @@ class Renderer:
             self.frame[start:start + len(row)] = row
 
     def paint(self) -> None:
-        """The outer square, plus two test cells to check placement."""
+        """The outer square, filled with a full grid of walled cells."""
         self.clear(COLOR_BG)
-        x, y, side = self.origin_x, self.origin_y, self.side
-        self.fill_rect(x, y, side, side, COLOR_WALL)
+        x, y = self.origin_x, self.origin_y
+        self.fill_rect(x, y, self.side_w, self.side_h, COLOR_WALL)
         self.fill_rect(
-            x + WALL, y + WALL, side - 2 * WALL, side - 2 * WALL, COLOR_FLOOR
+            x + WALL, y + WALL, self.grid_w, self.grid_h, COLOR_FLOOR
         )
-        # Top-left cell: tucked against the inside of the wall.
-        self.draw_cell(x + WALL, y + WALL)
-        # Centre cell: same centre as the square itself.
-        middle = (side - CELL) // 2
-        self.draw_cell(x + middle, y + middle)
+        for row in range(ROWS):
+            for col in range(COLS):
+                self.draw_cell(col, row)
         self.buf[:] = self.frame
 
-    def draw_cell(self, x: int, y: int) -> None:
+    def draw_cell(self, col: int, row: int) -> None:
         """One cell: walls all round, floor showing through the middle."""
-        self.fill_rect(x, y, CELL, CELL, COLOR_WALL)
+        x = self.origin_x + WALL + col * self.cell
+        y = self.origin_y + WALL + row * self.cell
+        size = self.cell
+        self.fill_rect(x, y, size, size, COLOR_WALL)
         self.fill_rect(
-            x + WALL, y + WALL, CELL - 2 * WALL, CELL - 2 * WALL, COLOR_FLOOR
+            x + WALL, y + WALL, size - 2 * WALL, size - 2 * WALL, COLOR_FLOOR
         )
 
     def on_expose(self, _param: object) -> None:
