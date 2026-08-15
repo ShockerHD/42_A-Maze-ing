@@ -5,6 +5,8 @@ Grid size comes from the maze, not from config yet.
 
 """
 
+from collections.abc import Callable
+
 from mlx import Mlx
 
 from app.keys import ACTIONS
@@ -31,10 +33,16 @@ COLOR_EXIT = 0xFFE05252
 
 
 class Renderer:
-    def __init__(self, maze: MazeGenerator, title: str = "A-Maze-ing") -> None:
+    def __init__(
+        self,
+        maze: MazeGenerator,
+        make_maze: Callable[[], MazeGenerator] | None = None,
+        title: str = "A-Maze-ing",
+    ) -> None:
         self.maze = maze
-        self.cols = maze.width
-        self.rows = maze.height
+        # Build a replacement maze when R is pressed. Without one the
+        # renderer still works, it just cannot regenerate.
+        self.make_maze = make_maze
         self.m = Mlx()
         self.mlx = self.m.mlx_init()
         self.win = self.m.mlx_new_window(self.mlx, WIDTH, HEIGHT, title)
@@ -45,6 +53,12 @@ class Renderer:
             raise SystemExit(f"expected 32 bpp, got {self.bpp}")
         self.px_bytes = self.bpp // 8
         self.frame = bytearray(self.size_line * HEIGHT)
+        self.fit()
+
+    def fit(self) -> None:
+        """Size and centre the grid for the current maze."""
+        self.cols = self.maze.width
+        self.rows = self.maze.height
         # Cell size derived from the grid, so the cells tile the square
         # exactly instead of leaving a remainder.
         room_w = WIDTH - 2 * MARGIN
@@ -148,11 +162,13 @@ class Renderer:
         self.m.mlx_loop_exit(self.mlx)
 
     def regenerate(self) -> None:
-        # Building a *new* maze needs a generator factory, which is the next
-        # step. Until then this only repaints the maze we already have, so
-        # the key and the redraw path can be tested on their own.
-        print("regenerate: repainting current maze (new maze not wired yet)",
-              flush=True)
+        """Build a fresh maze and redraw. Repaints only if none is wired."""
+        if self.make_maze is None:
+            print("regenerate: no generator wired, repainting", flush=True)
+        else:
+            self.maze = self.make_maze()
+            # A replacement maze may be a different shape, so re-fit first.
+            self.fit()
         self.refresh()
 
     def run(self) -> None:
