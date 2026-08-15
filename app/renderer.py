@@ -87,7 +87,8 @@ class Renderer:
         x, y = self.origin_x, self.origin_y
         self.fill_rect(x, y, self.side_w, self.side_h, COLOR_WALL)
         self.fill_rect(
-            x + self.wall, y + self.wall, self.grid_w, self.grid_h, COLOR_FLOOR
+            x + self.wall, y + self.wall,
+            self.grid_w, self.grid_h, COLOR_FLOOR,
         )
         grid = self.maze.grid
         for row in range(self.rows):
