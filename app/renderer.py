@@ -7,6 +7,7 @@ Grid size comes from the maze, not from config yet.
 
 from mlx import Mlx
 
+from app.keys import ACTIONS
 from mazegen import MazeGenerator
 
 WIDTH = 1280
@@ -21,7 +22,6 @@ WALL_S = 4
 WALL_W = 8
 
 EVENT_CLIENT_MESSAGE = 33  # X11 ClientMessage -> WM close button
-KEY_ESC = 65307  # XK_Escape: the backend reports keysyms, not raw keycodes
 
 COLOR_BG = 0xFF1E1E28
 COLOR_WALL = 0xFFE0E0E8
@@ -129,9 +129,14 @@ class Renderer:
         self.m.mlx_loop_exit(self.mlx)
 
     def on_key(self, keycode: int, _param: object) -> None:
+        """Dispatch a keysym to the matching method, ignore the rest."""
+        action = ACTIONS.get(keycode)
+        if action is not None:
+            getattr(self, action)()
+
+    def quit(self) -> None:
         # Ctrl-C cannot interrupt mlx_loop from Python, so a key must.
-        if keycode == KEY_ESC:
-            self.m.mlx_loop_exit(self.mlx)
+        self.m.mlx_loop_exit(self.mlx)
 
     def run(self) -> None:
         self.paint()
