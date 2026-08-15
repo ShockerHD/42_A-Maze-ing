@@ -3,6 +3,7 @@ A-Maze-ing entry point: read a config, generate a maze, draw it.
 
 """
 
+import random
 import sys
 
 from pydantic import ValidationError
@@ -40,14 +41,17 @@ def main(argv: list[str]) -> int:
         return EXIT_ERROR
 
     def make_maze() -> MazeGenerator:
-        """Build a maze from the config. Called again for each regenerate."""
+        seed = config.seed
+        if seed is None:
+            seed = random.SystemRandom().randrange(2 ** 32)
+        print(f"seed: {seed}", flush=True)
         return MazeGenerator(
             width=config.width,
             height=config.height,
             entry=config.entry,
             exit=config.exit,
             perfect=config.perfect,
-            seed=config.seed,
+            seed=seed,
             algorithm=config.algorithm,
         )
 
