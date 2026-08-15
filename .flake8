@@ -1,0 +1,12 @@
+[flake8]
+# `flake8 .` is fixed by the subject, so the exclusions live here -- without
+# them it lints .venv and the vendored MLX sources.
+exclude =
+    .git,
+    __pycache__,
+    .venv,
+    venv,
+    build,
+    dist,
+    mlx_CLXV
+max-line-length = 79
