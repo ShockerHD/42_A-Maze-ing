@@ -30,6 +30,7 @@ COLOR_WALL = 0xFFE0E0E8
 COLOR_FLOOR = 0xFF2A2A38
 COLOR_ENTRY = 0xFF4CAF50
 COLOR_EXIT = 0xFFE05252
+COLOR_PATH = 0xFF3A6EA5
 
 
 class Renderer:
@@ -108,10 +109,16 @@ class Renderer:
         for row in range(self.rows):
             for col in range(self.cols):
                 self.draw_cell(col, row, grid[row][col])
-        # Painted after the grid so the walls around them stay untouched.
+        self.draw_path()
+        # Painted after the path so entry and exit stay their own colours.
         self.fill_floor(*self.maze.entry, COLOR_ENTRY)
         self.fill_floor(*self.maze.exit, COLOR_EXIT)
         self.buf[:] = self.frame
+
+    def draw_path(self) -> None:
+        """Tint the floors along the entry-to-exit route."""
+        for col, row in self.maze.solution:
+            self.fill_floor(col, row, COLOR_PATH)
 
     def fill_floor(self, col: int, row: int, color: int) -> None:
         """Recolour a cell's floor, leaving its four walls as they are."""
