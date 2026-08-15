@@ -39,8 +39,9 @@ def main(argv: list[str]) -> int:
         print(f"error: {error}", file=sys.stderr)
         return EXIT_ERROR
 
-    try:
-        maze = MazeGenerator(
+    def make_maze() -> MazeGenerator:
+        """Build a maze from the config. Called again for each regenerate."""
+        return MazeGenerator(
             width=config.width,
             height=config.height,
             entry=config.entry,
@@ -49,12 +50,15 @@ def main(argv: list[str]) -> int:
             seed=config.seed,
             algorithm=config.algorithm,
         )
+
+    try:
+        maze = make_maze()
     except ValueError as error:
         print(f"error: {path}: {error}", file=sys.stderr)
         return EXIT_ERROR
 
     try:
-        Renderer(maze).run()
+        Renderer(maze, make_maze).run()
     except SystemExit as error:
         print(f"error: {error}", file=sys.stderr)
         return EXIT_ERROR
