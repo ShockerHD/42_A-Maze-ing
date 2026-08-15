@@ -171,6 +171,12 @@ class Renderer:
             self.fit()
         self.refresh()
 
+    def toggle_path(self) -> None:
+        # Drawing maze.solution comes next; this only proves the key routes
+        # here and that a redraw follows.
+        print("path: not drawn yet, repainting", flush=True)
+        self.refresh()
+
     def run(self) -> None:
         self.paint()
         self.m.mlx_expose_hook(self.win, self.on_expose, None)
