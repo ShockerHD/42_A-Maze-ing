@@ -1,23 +1,24 @@
 """
-MLX renderer: draw a square outlined in walls.
+MLX renderer: draw a generated maze.
 
-No cells, no maze, no config yet.
+Grid size comes from the maze, not from config yet.
 
 """
 
 from mlx import Mlx
 
+from mazegen import MazeGenerator
+
 WIDTH = 1280
 HEIGHT = 720
 MARGIN = 40
-WALL = 6
+WALL_RATIO = 8  # wall thickness = cell // WALL_RATIO, so it scales with zoom
 
-COLS = 13
-ROWS = 13
-
-# Hardcoded until the config is wired in. (col, row), 0-based.
-ENTRY = (0, 0)
-EXIT = (COLS - 1, ROWS - 1)
+# Wall bits as produced by MazeGenerator.grid. 1 = closed.
+WALL_N = 1
+WALL_E = 2
+WALL_S = 4
+WALL_W = 8
 
 EVENT_CLIENT_MESSAGE = 33  # X11 ClientMessage -> WM close button
 KEY_ESC = 65307  # XK_Escape: the backend reports keysyms, not raw keycodes
@@ -30,7 +31,10 @@ COLOR_EXIT = 0xFFE05252
 
 
 class Renderer:
-    def __init__(self, title: str = "A-Maze-ing") -> None:
+    def __init__(self, maze: MazeGenerator, title: str = "A-Maze-ing") -> None:
+        self.maze = maze
+        self.cols = maze.width
+        self.rows = maze.height
         self.m = Mlx()
         self.mlx = self.m.mlx_init()
         self.win = self.m.mlx_new_window(self.mlx, WIDTH, HEIGHT, title)
@@ -43,12 +47,15 @@ class Renderer:
         self.frame = bytearray(self.size_line * HEIGHT)
         # Cell size derived from the grid, so the cells tile the square
         # exactly instead of leaving a remainder.
-        room = min(WIDTH, HEIGHT) - 2 * MARGIN - 2 * WALL
-        self.cell = room // max(COLS, ROWS)
+        room_w = WIDTH - 2 * MARGIN - 2 * WALL
+        room_h = HEIGHT - 2 * MARGIN - 2 * WALL
+        self.cell = min(room_w // self.cols, room_h // self.rows)
         if self.cell < 3:
-            raise SystemExit(f"{COLS}x{ROWS} is too large for this window")
-        self.grid_w = self.cell * COLS
-        self.grid_h = self.cell * ROWS
+            raise SystemExit(
+                f"{self.cols}x{self.rows} is too large for this window"
+            )
+        self.grid_w = self.cell * self.cols
+        self.grid_h = self.cell * self.rows
         self.side_w = self.grid_w + 2 * WALL
         self.side_h = self.grid_h + 2 * WALL
         self.origin_x = (WIDTH - self.side_w) // 2
@@ -74,12 +81,13 @@ class Renderer:
         self.fill_rect(
             x + WALL, y + WALL, self.grid_w, self.grid_h, COLOR_FLOOR
         )
-        for row in range(ROWS):
-            for col in range(COLS):
-                self.draw_cell(col, row)
+        grid = self.maze.grid
+        for row in range(self.rows):
+            for col in range(self.cols):
+                self.draw_cell(col, row, grid[row][col])
         # Painted after the grid so the walls around them stay untouched.
-        self.fill_floor(*ENTRY, COLOR_ENTRY)
-        self.fill_floor(*EXIT, COLOR_EXIT)
+        self.fill_floor(*self.maze.entry, COLOR_ENTRY)
+        self.fill_floor(*self.maze.exit, COLOR_EXIT)
         self.buf[:] = self.frame
 
     def fill_floor(self, col: int, row: int, color: int) -> None:
@@ -89,15 +97,20 @@ class Renderer:
         inner = self.cell - 2 * WALL
         self.fill_rect(x + WALL, y + WALL, inner, inner, color)
 
-    def draw_cell(self, col: int, row: int) -> None:
-        """One cell: walls all round, floor showing through the middle."""
+    def draw_cell(self, col: int, row: int, bits: int) -> None:
+        """One cell: floor, then only the walls the maze says are closed."""
         x = self.origin_x + WALL + col * self.cell
         y = self.origin_y + WALL + row * self.cell
         size = self.cell
-        self.fill_rect(x, y, size, size, COLOR_WALL)
-        self.fill_rect(
-            x + WALL, y + WALL, size - 2 * WALL, size - 2 * WALL, COLOR_FLOOR
-        )
+        self.fill_rect(x, y, size, size, COLOR_FLOOR)
+        if bits & WALL_N:
+            self.fill_rect(x, y, size, WALL, COLOR_WALL)
+        if bits & WALL_S:
+            self.fill_rect(x, y + size - WALL, size, WALL, COLOR_WALL)
+        if bits & WALL_W:
+            self.fill_rect(x, y, WALL, size, COLOR_WALL)
+        if bits & WALL_E:
+            self.fill_rect(x + size - WALL, y, WALL, size, COLOR_WALL)
 
     def on_expose(self, _param: object) -> None:
         # The first paint has to reach the window from inside the loop.
@@ -123,4 +136,7 @@ class Renderer:
 
 
 if __name__ == "__main__":
-    Renderer().run()
+    demo = MazeGenerator(
+        width=21, height=30, entry=(0, 0), exit=(20, 12), seed=42
+    )
+    Renderer(demo).run()
