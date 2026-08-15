@@ -121,9 +121,18 @@ class Renderer:
         if bits & WALL_E:
             self.fill_rect(x + size - t, y, t, size, COLOR_WALL)
 
+    def show(self) -> None:
+        """Push the current image to the window."""
+        self.m.mlx_put_image_to_window(self.mlx, self.win, self.img, 0, 0)
+
+    def refresh(self) -> None:
+        """Rebuild the frame and show it -- for anything that changes state."""
+        self.paint()
+        self.show()
+
     def on_expose(self, _param: object) -> None:
         # The first paint has to reach the window from inside the loop.
-        self.m.mlx_put_image_to_window(self.mlx, self.win, self.img, 0, 0)
+        self.show()
 
     def on_close(self, _param: object) -> None:
         self.m.mlx_loop_exit(self.mlx)
@@ -137,6 +146,14 @@ class Renderer:
     def quit(self) -> None:
         # Ctrl-C cannot interrupt mlx_loop from Python, so a key must.
         self.m.mlx_loop_exit(self.mlx)
+
+    def regenerate(self) -> None:
+        # Building a *new* maze needs a generator factory, which is the next
+        # step. Until then this only repaints the maze we already have, so
+        # the key and the redraw path can be tested on their own.
+        print("regenerate: repainting current maze (new maze not wired yet)",
+              flush=True)
+        self.refresh()
 
     def run(self) -> None:
         self.paint()
