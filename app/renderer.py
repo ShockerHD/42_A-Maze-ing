@@ -1,7 +1,6 @@
 """
-MLX renderer: draw a generated maze.
 
-Grid size comes from the maze, not from config yet.
+MLX renderer: draw a generated maze.
 
 """
 
@@ -203,6 +202,11 @@ class Renderer:
         """Show or hide the solution stripe."""
         self.show_path = not self.show_path
         self.refresh()
+
+    def cycle_palette(self) -> None:
+        # Needs more than one colour scheme to cycle through; that is task
+        # TODO when more pallettes
+        print("Cycle pallete called", flush=True)
 
     def run(self) -> None:
         self.paint()
