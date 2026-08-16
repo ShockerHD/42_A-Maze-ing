@@ -10,7 +10,7 @@ from collections.abc import Callable
 from mlx import Mlx
 
 from app.keys import ACTIONS
-from mazegen import MazeGenerator
+from mazegen import Coord, MazeGenerator
 
 WIDTH = 1280
 HEIGHT = 720
@@ -116,9 +116,29 @@ class Renderer:
         self.buf[:] = self.frame
 
     def draw_path(self) -> None:
-        """Tint the floors along the entry-to-exit route."""
-        for col, row in self.maze.solution:
+        """Tint the floors along the entry-to-exit route, openings included."""
+        path = self.maze.solution
+        for col, row in path:
             self.fill_floor(col, row, COLOR_PATH)
+        # fill_floor stops at the wall ring, so consecutive cells would read
+        # as separate tiles. Tint the gap between each pair as well.
+        for before, after in zip(path, path[1:]):
+            self.fill_gap(before, after, COLOR_PATH)
+
+    def fill_gap(self, before: Coord, after: Coord, color: int) -> None:
+        """Tint the opening shared by two neighbouring cells."""
+        col = min(before[0], after[0])
+        row = min(before[1], after[1])
+        x = self.origin_x + self.wall + col * self.cell
+        y = self.origin_y + self.wall + row * self.cell
+        inner = self.cell - 2 * self.wall
+        span = 2 * self.wall
+        if before[0] != after[0]:  # side by side
+            self.fill_rect(x + self.wall + inner, y + self.wall,
+                           span, inner, color)
+        else:  # one above the other
+            self.fill_rect(x + self.wall, y + self.wall + inner,
+                           inner, span, color)
 
     def fill_floor(self, col: int, row: int, color: int) -> None:
         """Recolour a cell's floor, leaving its four walls as they are."""
