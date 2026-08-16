@@ -5,16 +5,23 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "pydantic>=2",
+    "mlx",
 ]
 
 [dependency-groups]
 dev = [
-    "flake8",
-    "mypy",
+    "flake8>=7.3.0",
+    "mypy>=2.3.0",
+    "pydantic>=2.13.4",
+    "build>=1.5.0",
 ]
 
 [tool.uv]
 package = false
+
+# 42's MiniLibX, not Apple's `mlx` on PyPI. The wheel ships with the subject.
+[tool.uv.sources]
+mlx = { path = "mlx-2.2-py3-none-any.whl" }
 
 [tool.mypy]
 # `mypy .` is fixed by the subject, so keep the exclusions here.

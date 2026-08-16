@@ -1,14 +1,9 @@
-MLX_DIR = mlx_CLXV
-MLX_WHEEL = $(MLX_DIR)/mlx-2.2-py3-none-any.whl
+MLX_WHEEL = mlx-2.2-py3-none-any.whl
 
-install:
+# uv resolves `mlx` to $(MLX_WHEEL) via [tool.uv.sources], so the wheel has to
+# be in place before `uv sync` -- otherwise resolution fails outright.
+install: $(MLX_WHEEL)
 	uv sync
-	$(MAKE) mlx
-
-# MLX is not a pyproject dependency -- the wheel is built from the local
-# mlx_CLXV sources, so `uv sync` prunes it every time. Reinstall it after.
-mlx: $(MLX_WHEEL)
-	uv pip install --python .venv/bin/python $(MLX_WHEEL)
 
 $(MLX_WHEEL):
 	@test -d $(MLX_DIR) || { echo "$(MLX_DIR)/ missing: get the MLX sources from the subject"; exit 1; }
