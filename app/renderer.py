@@ -8,7 +8,7 @@ from collections.abc import Callable
 
 from mlx import Mlx
 
-from app.keys import ACTIONS
+from app.keys import ACTIONS, LEGEND
 from mazegen import Coord, MazeGenerator
 
 WIDTH = 1280
@@ -30,6 +30,7 @@ COLOR_FLOOR = 0xFF2A2A38
 COLOR_ENTRY = 0xFF4CAF50
 COLOR_EXIT = 0xFFE05252
 COLOR_PATH = 0xFF3A6EA5
+COLOR_LEGEND = 0xFFA0A0B0
 
 
 class Renderer:
@@ -163,8 +164,21 @@ class Renderer:
             self.fill_rect(x + size - t, y, t, size, COLOR_WALL)
 
     def show(self) -> None:
-        """Push the current image to the window."""
+        """Push the current image to the window, then the legend on top."""
         self.m.mlx_put_image_to_window(self.mlx, self.win, self.img, 0, 0)
+        self.draw_legend()
+
+    def draw_legend(self) -> None:
+        """
+        Key hints at the bottom.
+
+        """
+        text = "   ".join(f"{key} {hint}" for key, hint in LEGEND)
+        self.m.mlx_string_put(
+            self.mlx, self.win,
+            self.origin_x, HEIGHT - MARGIN // 2,
+            COLOR_LEGEND, text,
+        )
 
     def refresh(self) -> None:
         """Rebuild the frame and show it -- for anything that changes state."""
