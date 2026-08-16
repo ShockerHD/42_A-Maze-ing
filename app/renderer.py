@@ -44,6 +44,7 @@ class Renderer:
         # Build a replacement maze when R is pressed. Without one the
         # renderer still works, it just cannot regenerate.
         self.make_maze = make_maze
+        self.show_path = False
         self.m = Mlx()
         self.mlx = self.m.mlx_init()
         self.win = self.m.mlx_new_window(self.mlx, WIDTH, HEIGHT, title)
@@ -109,7 +110,8 @@ class Renderer:
         for row in range(self.rows):
             for col in range(self.cols):
                 self.draw_cell(col, row, grid[row][col])
-        self.draw_path()
+        if self.show_path:
+            self.draw_path()
         # Painted after the path so entry and exit stay their own colours.
         self.fill_floor(*self.maze.entry, COLOR_ENTRY)
         self.fill_floor(*self.maze.exit, COLOR_EXIT)
@@ -198,9 +200,8 @@ class Renderer:
         self.refresh()
 
     def toggle_path(self) -> None:
-        # Drawing maze.solution comes next; this only proves the key routes
-        # here and that a redraw follows.
-        print("path: not drawn yet, repainting", flush=True)
+        """Show or hide the solution stripe."""
+        self.show_path = not self.show_path
         self.refresh()
 
     def run(self) -> None:
