@@ -4,7 +4,7 @@ Key bindings for the renderer.
 
 """
 
-__all__ = ["ACTIONS"]
+__all__ = ["ACTIONS", "LEGEND"]
 
 KEY_ESC = 65307
 KEY_SPACE = 32
@@ -22,3 +22,13 @@ ACTIONS: dict[int, str] = {
     KEY_C: "cycle_palette",
     KEY_SPACE: "replay",
 }
+
+# What the on-screen legend spells out, in the order it is shown. Kept next
+# to ACTIONS so a new binding and its hint are added in one place.
+LEGEND: tuple[tuple[str, str], ...] = (
+    ("R", "regenerate"),
+    ("P", "path"),
+    ("C", "colours"),
+    ("SPACE", "replay"),
+    ("ESC/Q", "quit"),
+)
