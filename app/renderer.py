@@ -208,6 +208,13 @@ class Renderer:
         # TODO when more pallettes
         print("Cycle pallete called", flush=True)
 
+    def replay(self) -> None:
+        # Replaying maze.steps() as an animation This function requires
+        # animation, which is in further steps in our plan
+        steps = sum(1 for _ in self.maze.steps())
+        print(f"replay: {steps} steps recorded, ano animation yet ;(",
+              flush=True)
+
     def run(self) -> None:
         self.paint()
         self.m.mlx_expose_hook(self.win, self.on_expose, None)

@@ -7,6 +7,7 @@ Key bindings for the renderer.
 __all__ = ["ACTIONS"]
 
 KEY_ESC = 65307
+KEY_SPACE = 32
 KEY_C = 99
 KEY_P = 112
 KEY_Q = 113
@@ -19,4 +20,5 @@ ACTIONS: dict[int, str] = {
     KEY_R: "regenerate",
     KEY_P: "toggle_path",
     KEY_C: "cycle_palette",
+    KEY_SPACE: "replay",
 }
