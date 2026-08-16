@@ -6,8 +6,8 @@ install: $(MLX_WHEEL)
 	uv sync
 
 $(MLX_WHEEL):
-	@test -d $(MLX_DIR) || { echo "$(MLX_DIR)/ missing: get the MLX sources from the subject"; exit 1; }
-	$(MAKE) -C $(MLX_DIR)
+	@echo "$(MLX_WHEEL) missing: get the MLX wheel from the subject"
+	@exit 1
 
 run:
 	uv run a_maze_ing.py config.txt
@@ -18,7 +18,6 @@ debug:
 clean:
 	find . -type d -name '__pycache__' -prune -exec rm -rf {} +
 	rm -rf .mypy_cache .pytest_cache .venv uv.lock
-	@test -d $(MLX_DIR) && $(MAKE) -C $(MLX_DIR) clean || true
 
 lint:
 	uv run flake8 .
@@ -29,4 +28,4 @@ lint-strict:
 	uv run flake8 .
 	uv run mypy . --strict
 
-.PHONY: install mlx run debug clean lint lint-strict
+.PHONY: install run debug clean lint lint-strict
