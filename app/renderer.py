@@ -24,6 +24,11 @@ WALL_W = 8
 
 EVENT_CLIENT_MESSAGE = 33  # X11 ClientMessage -> WM close button
 
+MAX_TEXT = 60
+
+GLYPH_W = 10
+GLYPH_H = 20
+
 COLOR_BG = 0xFF1E1E28
 COLOR_WALL = 0xFFE0E0E8
 COLOR_FLOOR = 0xFF2A2A38
@@ -173,12 +178,22 @@ class Renderer:
         Key hints at the bottom.
 
         """
-        text = "   ".join(f"{key} {hint}" for key, hint in LEGEND)
-        self.m.mlx_string_put(
-            self.mlx, self.win,
-            self.origin_x, HEIGHT - MARGIN // 2,
-            COLOR_LEGEND, text,
+        keys = " ".join(f"[{key}] {hint}" for key, hint in LEGEND)
+        text = f"{self.status()} {keys}"[:MAX_TEXT]
+        y = min(
+            self.origin_y + self.side_h + (MARGIN - GLYPH_H) // 2,
+            HEIGHT - GLYPH_H,
         )
+        centred = self.origin_x + (self.side_w - len(text) * GLYPH_W) // 2
+        x = max(
+            MARGIN // 2,
+            min(centred, WIDTH - MARGIN // 2 - len(text) * GLYPH_W),
+        )
+        self.m.mlx_string_put(self.mlx, self.win, x, y, COLOR_LEGEND, text)
+
+    def status(self) -> str:
+        """What the view is showing. Kept short -- see MAX_TEXT."""
+        return f"{self.cols}x{self.rows}"
 
     def refresh(self) -> None:
         """Rebuild the frame and show it -- for anything that changes state."""

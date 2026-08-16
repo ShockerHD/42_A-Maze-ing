@@ -26,9 +26,9 @@ ACTIONS: dict[int, str] = {
 # What the on-screen legend spells out, in the order it is shown. Kept next
 # to ACTIONS so a new binding and its hint are added in one place.
 LEGEND: tuple[tuple[str, str], ...] = (
-    ("R", "regenerate"),
+    ("R", "regen"),
     ("P", "path"),
     ("C", "colours"),
-    ("SPACE", "replay"),
-    ("ESC/Q", "quit"),
+    ("SPC", "replay"),
+    ("ESC", "quit"),
 )
