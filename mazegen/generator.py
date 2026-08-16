@@ -1,30 +1,60 @@
 """
-Stub with fixed maze generation.
-Body of generate() to be replaced with kruskal / dfs
+MazeGenerator: orchestration, the shared vocabulary and step events.
 """
 
+import random
 from dataclasses import dataclass
 from typing import Iterator, Literal
 
-Coord = tuple[int, int]
+from mazegen import algorithms, solver
+from mazegen.pattern import glyph_cells, splits_grid
+
+__all__ = [
+    "Coord", "Step", "StepKind", "MazeGenerator",
+    "BIT", "BIT_NORTH", "BIT_EAST", "BIT_SOUTH", "BIT_WEST", "ALL_WALLS",
+    "MOVE", "edges_to_grid",
+]
+
+Coord = tuple[int, int]          # (x, y), x = column, y = row, origin top-left
 StepKind = Literal[
     "open", "consider", "reject", "visit", "backtrack", "done"
 ]
 
+BIT_NORTH = 1
+BIT_EAST = 2
+BIT_SOUTH = 4
+BIT_WEST = 8
+ALL_WALLS = 0xF
+
 # Wall bit per (dx, dy) step. 1 = wall closed.
-_BIT: dict[Coord, int] = {
-    (0, -1): 1,   # North
-    (1, 0): 2,    # East
-    (0, 1): 4,    # South
-    (-1, 0): 8,   # West
+BIT: dict[Coord, int] = {
+    (0, -1): BIT_NORTH,
+    (1, 0): BIT_EAST,
+    (0, 1): BIT_SOUTH,
+    (-1, 0): BIT_WEST,
 }
-_MOVE: dict[Coord, str] = {
+MOVE: dict[Coord, str] = {
     (0, -1): "N",
     (1, 0): "E",
     (0, 1): "S",
     (-1, 0): "W",
 }
-_ALL_WALLS = 0xF
+_DELTAS: tuple[Coord, ...] = ((0, -1), (1, 0), (0, 1), (-1, 0))
+
+
+def edges_to_grid(
+    width: int,
+    height: int,
+    edges: set[frozenset[Coord]],
+) -> list[list[int]]:
+    """Row-major wall bitmasks with *edges* opened. 1 = closed.
+    """
+    rows = [[ALL_WALLS] * width for _ in range(height)]
+    for edge in edges:
+        (ax, ay), (bx, by) = tuple(edge)
+        rows[ay][ax] &= ~BIT[(bx - ax, by - ay)]
+        rows[by][bx] &= ~BIT[(ax - bx, ay - by)]
+    return rows
 
 
 @dataclass(frozen=True)
@@ -45,7 +75,7 @@ class MazeGenerator:
         exit: Coord,
         perfect: bool = True,
         seed: int | None = None,
-        algorithm: str = "kruskal",   # "kruskal" | "dfs"
+        algorithm: str = "dfs",   # "kruskal" | "dfs"
     ) -> None:
         if width < 2 or height < 2:
             raise ValueError("maze must be at least 2x2")
@@ -62,10 +92,20 @@ class MazeGenerator:
         self.exit = exit
         self.perfect = perfect
         self.algorithm = algorithm
-        self._seed = 0 if seed is None else seed
+        self._seed = (
+            random.SystemRandom().randrange(2 ** 32) if seed is None else seed
+        )
+        self._rng = random.Random(self._seed)
         self._open: set[frozenset[Coord]] = set()
         self._steps: list[Step] = []
-        self._order: list[Coord] = []
+        self._solution: list[Coord] | None = None
+        self._pattern = self._glyph_mask()
+        self._free = frozenset(
+            (x, y)
+            for y in range(height)
+            for x in range(width)
+            if (x, y) not in self._pattern
+        )
         self.generate()
 
     @staticmethod
@@ -74,28 +114,54 @@ class MazeGenerator:
         x, y = cell
         return 0 <= x < width and 0 <= y < height
 
-    def _serpentine(self) -> list[Coord]:
-        """Return every cell in boustrophedon order (a Hamiltonian path)."""
-        cells: list[Coord] = []
-        for y in range(self.height):
-            xs = list(range(self.width))
-            if y % 2:
-                xs.reverse()
-            cells.extend((x, y) for x in xs)
-        return cells
+    def _glyph_mask(self) -> frozenset[Coord]:
+        """The '42' cells to keep out of the maze"""
+        mask = glyph_cells(self.width, self.height)
+        if mask & {self.entry, self.exit}:
+            return frozenset()
+        if splits_grid(self.width, self.height, mask, self.entry, self.exit):
+            return frozenset()
+        return mask
+
+    def _neighbours(self, cell: Coord) -> list[Coord]:
+        """The in-grid, non-glyph cells orthogonally adjacent to *cell*.
+
+        The single place the glyph is consulted while carving: to an
+        algorithm those cells simply do not exist.
+        """
+        x, y = cell
+        return [
+            neighbour
+            for dx, dy in _DELTAS
+            if (neighbour := (x + dx, y + dy)) in self._free
+        ]
+
+    def _linked(self, cell: Coord) -> list[Coord]:
+        """The neighbours of *cell* reachable through an open wall."""
+        return [
+            neighbour
+            for neighbour in self._neighbours(cell)
+            if frozenset((cell, neighbour)) in self._open
+        ]
 
     def generate(self) -> None:
+        """(Re)generate the maze. Deterministic for a fixed seed."""
+        if self.algorithm == "dfs":
+            events = algorithms.dfs(self.entry, self._neighbours, self._rng)
+        elif self.algorithm == "kruskal":
+            events = algorithms.kruskal(
+                self._free, self._neighbours, self._rng
+            )
+
+        self._rng.seed(self._seed)
         self._open.clear()
         self._steps.clear()
-        self._order = self._serpentine()
+        self._solution = None
 
-        previous = self._order[0]
-        self._steps.append(Step("visit", previous))
-        for cell in self._order[1:]:
-            self._steps.append(Step("visit", cell))
-            self._open.add(frozenset((previous, cell)))
-            self._steps.append(Step("open", previous, cell))
-            previous = cell
+        for kind, a, b in events:
+            self._steps.append(Step(kind, a, b))
+            if kind == "open" and b is not None:
+                self._open.add(frozenset((a, b)))
         self._steps.append(Step("done", self.exit))
 
     def steps(self) -> Iterator[Step]:
@@ -105,35 +171,30 @@ class MazeGenerator:
     @property
     def grid(self) -> list[list[int]]:
         """Row-major wall bitmasks. Bit 0=N, 1=E, 2=S, 3=W. 1 = closed."""
-        rows = [[_ALL_WALLS] * self.width for _ in range(self.height)]
-        for edge in self._open:
-            (ax, ay), (bx, by) = tuple(edge)
-            rows[ay][ax] &= ~_BIT[(bx - ax, by - ay)]
-            rows[by][bx] &= ~_BIT[(ax - bx, ay - by)]
-        return rows
+        return edges_to_grid(self.width, self.height, self._open)
 
     @property
     def solution(self) -> list[Coord]:
         """Shortest path as cells, entry first, exit last."""
-        start = self._order.index(self.entry)
-        end = self._order.index(self.exit)
-        if start <= end:
-            return self._order[start:end + 1]
-        return self._order[end:start + 1][::-1]
+        if self._solution is None:
+            self._solution = solver.shortest_path(
+                self.entry, self.exit, self._linked
+            )
+        return self._solution
 
     @property
     def solution_string(self) -> str:
-        """The same path as an 'NESW...' move string."""
+        """Solution as a NESW string"""
         path = self.solution
         return "".join(
-            _MOVE[(b[0] - a[0], b[1] - a[1])]
+            MOVE[(b[0] - a[0], b[1] - a[1])]
             for a, b in zip(path, path[1:])
         )
 
     @property
     def pattern_cells(self) -> frozenset[Coord]:
-        """Cells forming the '42' glyph. Always empty in the stub."""
-        return frozenset()
+        """Cells forming the '42' glyph. Empty if the glyph was skipped."""
+        return self._pattern
 
     @property
     def seed(self) -> int:
