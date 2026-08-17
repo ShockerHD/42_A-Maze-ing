@@ -1,13 +1,15 @@
 """
-MLX renderer: draw a generated maze.
 
-Grid size comes from the maze, not from config yet.
+MLX renderer: draw a generated maze.
 
 """
 
+from collections.abc import Callable
+
 from mlx import Mlx
 
-from mazegen import MazeGenerator
+from app.keys import ACTIONS, LEGEND
+from mazegen import Coord, MazeGenerator
 
 WIDTH = 1280
 HEIGHT = 720
@@ -21,20 +23,33 @@ WALL_S = 4
 WALL_W = 8
 
 EVENT_CLIENT_MESSAGE = 33  # X11 ClientMessage -> WM close button
-KEY_ESC = 65307  # XK_Escape: the backend reports keysyms, not raw keycodes
+
+MAX_TEXT = 60
+
+GLYPH_W = 10
+GLYPH_H = 20
 
 COLOR_BG = 0xFF1E1E28
 COLOR_WALL = 0xFFE0E0E8
 COLOR_FLOOR = 0xFF2A2A38
 COLOR_ENTRY = 0xFF4CAF50
 COLOR_EXIT = 0xFFE05252
+COLOR_PATH = 0xFF3A6EA5
+COLOR_LEGEND = 0xFFA0A0B0
 
 
 class Renderer:
-    def __init__(self, maze: MazeGenerator, title: str = "A-Maze-ing") -> None:
+    def __init__(
+        self,
+        maze: MazeGenerator,
+        make_maze: Callable[[], MazeGenerator] | None = None,
+        title: str = "A-Maze-ing",
+    ) -> None:
         self.maze = maze
-        self.cols = maze.width
-        self.rows = maze.height
+        # Build a replacement maze when R is pressed. Without one the
+        # renderer still works, it just cannot regenerate.
+        self.make_maze = make_maze
+        self.show_path = False
         self.m = Mlx()
         self.mlx = self.m.mlx_init()
         self.win = self.m.mlx_new_window(self.mlx, WIDTH, HEIGHT, title)
@@ -45,6 +60,12 @@ class Renderer:
             raise SystemExit(f"expected 32 bpp, got {self.bpp}")
         self.px_bytes = self.bpp // 8
         self.frame = bytearray(self.size_line * HEIGHT)
+        self.fit()
+
+    def fit(self) -> None:
+        """Size and centre the grid for the current maze."""
+        self.cols = self.maze.width
+        self.rows = self.maze.height
         # Cell size derived from the grid, so the cells tile the square
         # exactly instead of leaving a remainder.
         room_w = WIDTH - 2 * MARGIN
@@ -94,10 +115,36 @@ class Renderer:
         for row in range(self.rows):
             for col in range(self.cols):
                 self.draw_cell(col, row, grid[row][col])
-        # Painted after the grid so the walls around them stay untouched.
+        if self.show_path:
+            self.draw_path()
+        # Painted after the path so entry and exit stay their own colours.
         self.fill_floor(*self.maze.entry, COLOR_ENTRY)
         self.fill_floor(*self.maze.exit, COLOR_EXIT)
         self.buf[:] = self.frame
+
+    def centre(self, cell: Coord) -> Coord:
+        """Pixel centre of a cell."""
+        col, row = cell
+        return (
+            self.origin_x + self.wall + col * self.cell + self.cell // 2,
+            self.origin_y + self.wall + row * self.cell + self.cell // 2,
+        )
+
+    def draw_path(self) -> None:
+        """A stripe down the middle of the entry-to-exit route."""
+        path = self.maze.solution
+        width = max(2, self.cell // 6)
+        half = width // 2
+        # One rect per step, centre to centre. Each covers both endpoints,
+        # so turns join up without a separate corner piece.
+        for before, after in zip(path, path[1:]):
+            ax, ay = self.centre(before)
+            bx, by = self.centre(after)
+            x, y = min(ax, bx), min(ay, by)
+            self.fill_rect(
+                x - half, y - half,
+                abs(bx - ax) + width, abs(by - ay) + width, COLOR_PATH,
+            )
 
     def fill_floor(self, col: int, row: int, color: int) -> None:
         """Recolour a cell's floor, leaving its four walls as they are."""
@@ -121,17 +168,81 @@ class Renderer:
         if bits & WALL_E:
             self.fill_rect(x + size - t, y, t, size, COLOR_WALL)
 
+    def show(self) -> None:
+        """Push the current image to the window, then the legend on top."""
+        self.m.mlx_put_image_to_window(self.mlx, self.win, self.img, 0, 0)
+        self.draw_legend()
+
+    def draw_legend(self) -> None:
+        """
+        Key hints at the bottom.
+
+        """
+        keys = " ".join(f"[{key}] {hint}" for key, hint in LEGEND)
+        text = f"{self.status()} {keys}"[:MAX_TEXT]
+        y = min(
+            self.origin_y + self.side_h + (MARGIN - GLYPH_H) // 2,
+            HEIGHT - GLYPH_H,
+        )
+        centred = self.origin_x + (self.side_w - len(text) * GLYPH_W) // 2
+        x = max(
+            MARGIN // 2,
+            min(centred, WIDTH - MARGIN // 2 - len(text) * GLYPH_W),
+        )
+        self.m.mlx_string_put(self.mlx, self.win, x, y, COLOR_LEGEND, text)
+
+    def status(self) -> str:
+        """What the view is showing. Kept short -- see MAX_TEXT."""
+        return f"{self.cols}x{self.rows}"
+
+    def refresh(self) -> None:
+        """Rebuild the frame and show it -- for anything that changes state."""
+        self.paint()
+        self.show()
+
     def on_expose(self, _param: object) -> None:
         # The first paint has to reach the window from inside the loop.
-        self.m.mlx_put_image_to_window(self.mlx, self.win, self.img, 0, 0)
+        self.show()
 
     def on_close(self, _param: object) -> None:
         self.m.mlx_loop_exit(self.mlx)
 
     def on_key(self, keycode: int, _param: object) -> None:
+        """Dispatch a keysym to the matching method, ignore the rest."""
+        action = ACTIONS.get(keycode)
+        if action is not None:
+            getattr(self, action)()
+
+    def quit(self) -> None:
         # Ctrl-C cannot interrupt mlx_loop from Python, so a key must.
-        if keycode == KEY_ESC:
-            self.m.mlx_loop_exit(self.mlx)
+        self.m.mlx_loop_exit(self.mlx)
+
+    def regenerate(self) -> None:
+        """Build a fresh maze and redraw. Repaints only if none is wired."""
+        if self.make_maze is None:
+            print("regenerate: no generator wired, repainting", flush=True)
+        else:
+            self.maze = self.make_maze()
+            # A replacement maze may be a different shape, so re-fit first.
+            self.fit()
+        self.refresh()
+
+    def toggle_path(self) -> None:
+        """Show or hide the solution stripe."""
+        self.show_path = not self.show_path
+        self.refresh()
+
+    def cycle_palette(self) -> None:
+        # Needs more than one colour scheme to cycle through; that is task
+        # TODO when more pallettes
+        print("Cycle pallete called", flush=True)
+
+    def replay(self) -> None:
+        # Replaying maze.steps() as an animation This function requires
+        # animation, which is in further steps in our plan
+        steps = sum(1 for _ in self.maze.steps())
+        print(f"replay: {steps} steps recorded, ano animation yet ;(",
+              flush=True)
 
     def run(self) -> None:
         self.paint()
