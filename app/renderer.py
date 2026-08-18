@@ -220,8 +220,9 @@ class Renderer:
         self.draw_text(x, y, text, self.palette.legend)
 
     def status(self) -> str:
-        """What the view is showing. Kept short -- see MAX_TEXT."""
-        return f"{self.cols}x{self.rows}"
+        """What the view is showing, ahead of the key hints."""
+        path = "on" if self.show_path else "off"
+        return f"{self.cols}x{self.rows} {self.palette.name} path:{path}"
 
     def refresh(self) -> None:
         """Rebuild the frame and show it -- for anything that changes state."""
