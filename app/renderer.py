@@ -35,6 +35,7 @@ COLOR_FLOOR = 0xFF2A2A38
 COLOR_ENTRY = 0xFF4CAF50
 COLOR_EXIT = 0xFFE05252
 COLOR_PATH = 0xFF3A6EA5
+COLOR_GLYPH = 0xFF3FA796
 COLOR_LEGEND = 0xFFA0A0B0
 
 
@@ -115,6 +116,8 @@ class Renderer:
         for row in range(self.rows):
             for col in range(self.cols):
                 self.draw_cell(col, row, grid[row][col])
+        for cell in self.maze.pattern_cells:
+            self.fill_floor(*cell, COLOR_GLYPH)
         if self.show_path:
             self.draw_path()
         # Painted after the path so entry and exit stay their own colours.
