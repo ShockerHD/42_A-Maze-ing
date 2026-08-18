@@ -170,3 +170,6 @@ pyrightconfig.json
 
 #MLX
 mlx_CLXV
+
+#a_maze_ing output
+maze_out.txt
