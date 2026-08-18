@@ -8,6 +8,7 @@ from collections.abc import Callable
 
 from mlx import Mlx
 
+from app.font import GLYPH_H, GLYPH_W, Font
 from app.keys import ACTIONS, LEGEND
 from app.palette import DEFAULT, PALETTES, Palette
 from mazegen import Coord, MazeGenerator
@@ -25,10 +26,10 @@ WALL_W = 8
 
 EVENT_CLIENT_MESSAGE = 33  # X11 ClientMessage -> WM close button
 
-MAX_TEXT = 60
-
-GLYPH_W = 10
-GLYPH_H = 20
+# The legend is drawn into the frame, so the only cap left is the frame's own
+# width -- mlx_string_put() used to cost one draw call per character, and the
+# backend has 64 per frame for the whole screen.
+MAX_TEXT = (WIDTH - MARGIN) // GLYPH_W
 
 
 class Renderer:
@@ -48,6 +49,7 @@ class Renderer:
         self.m = Mlx()
         self.mlx = self.m.mlx_init()
         self.win = self.m.mlx_new_window(self.mlx, WIDTH, HEIGHT, title)
+        self.font = Font(self.m, self.mlx)
         self.img = self.m.mlx_new_image(self.mlx, WIDTH, HEIGHT)
         self.buf, self.bpp, self.size_line, self.fmt = \
             self.m.mlx_get_data_addr(self.img)
@@ -98,6 +100,12 @@ class Renderer:
             self.frame[start:start + len(row)] = row
 
     def paint(self) -> None:
+        """One whole frame: the maze, the legend on top, then out to MLX."""
+        self.draw_maze()
+        self.draw_legend()
+        self.buf[:] = self.frame
+
+    def draw_maze(self) -> None:
         """The outer square, filled with a full grid of walled cells."""
         self.clear(self.palette.bg)
         x, y = self.origin_x, self.origin_y
@@ -117,7 +125,6 @@ class Renderer:
         # Painted after the path so entry and exit stay their own colours.
         self.fill_floor(*self.maze.entry, self.palette.entry)
         self.fill_floor(*self.maze.exit, self.palette.exit)
-        self.buf[:] = self.frame
 
     def centre(self, cell: Coord) -> Coord:
         """Pixel centre of a cell."""
@@ -166,9 +173,33 @@ class Renderer:
             self.fill_rect(x + size - t, y, t, size, self.palette.wall)
 
     def show(self) -> None:
-        """Push the current image to the window, then the legend on top."""
+        """Push the frame to the window -- one draw call for the lot."""
         self.m.mlx_put_image_to_window(self.mlx, self.win, self.img, 0, 0)
-        self.draw_legend()
+
+    def draw_glyph(self, x: int, y: int, char: str, color: int) -> None:
+        """One character, blended into the frame and clipped to the window."""
+        ink = color.to_bytes(self.px_bytes, "little")
+        mask = self.font.coverage(char)
+        for row in range(max(0, -y), min(GLYPH_H, HEIGHT - y)):
+            line = (y + row) * self.size_line
+            for col in range(max(0, -x), min(GLYPH_W, WIDTH - x)):
+                alpha = mask[row * GLYPH_W + col]
+                at = line + (x + col) * self.px_bytes
+                if alpha == 0xFF:
+                    self.frame[at:at + self.px_bytes] = ink
+                elif alpha:
+                    # An antialiased edge: mix ink into what is underneath.
+                    rest = 0xFF - alpha
+                    for byte in range(self.px_bytes):
+                        self.frame[at + byte] = (
+                            ink[byte] * alpha + self.frame[at + byte] * rest
+                        ) // 0xFF
+
+    def draw_text(self, x: int, y: int, text: str, color: int) -> None:
+        """A string, left to right from its top-left corner."""
+        for char in text:
+            self.draw_glyph(x, y, char, color)
+            x += GLYPH_W
 
     def draw_legend(self) -> None:
         """
@@ -186,9 +217,7 @@ class Renderer:
             MARGIN // 2,
             min(centred, WIDTH - MARGIN // 2 - len(text) * GLYPH_W),
         )
-        self.m.mlx_string_put(
-            self.mlx, self.win, x, y, self.palette.legend, text,
-        )
+        self.draw_text(x, y, text, self.palette.legend)
 
     def status(self) -> str:
         """What the view is showing. Kept short -- see MAX_TEXT."""
