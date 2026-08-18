@@ -6,11 +6,11 @@ import random
 from dataclasses import dataclass
 from typing import Iterator, Literal
 
-from mazegen import algorithms, solver
+from mazegen import algorithms, constraints, solver
 from mazegen.pattern import glyph_cells, splits_grid
 
 __all__ = [
-    "Coord", "Step", "StepKind", "MazeGenerator",
+    "Coord", "Event", "Step", "StepKind", "MazeGenerator",
     "BIT", "BIT_NORTH", "BIT_EAST", "BIT_SOUTH", "BIT_WEST", "ALL_WALLS",
     "MOVE", "edges_to_grid",
 ]
@@ -19,6 +19,8 @@ Coord = tuple[int, int]          # (x, y), x = column, y = row, origin top-left
 StepKind = Literal[
     "open", "consider", "reject", "visit", "backtrack", "done"
 ]
+
+Event = tuple[StepKind, Coord, "Coord | None"]
 
 BIT_NORTH = 1
 BIT_EAST = 2
@@ -144,6 +146,13 @@ class MazeGenerator:
             if frozenset((cell, neighbour)) in self._open
         ]
 
+    def _apply(self, events: Iterator[Event]) -> None:
+        """Record *events* as steps, opening the walls they announce."""
+        for kind, a, b in events:
+            self._steps.append(Step(kind, a, b))
+            if kind == "open" and b is not None:
+                self._open.add(frozenset((a, b)))
+
     def generate(self) -> None:
         """(Re)generate the maze. Deterministic for a fixed seed."""
         if self.algorithm == "dfs":
@@ -158,10 +167,11 @@ class MazeGenerator:
         self._steps.clear()
         self._solution = None
 
-        for kind, a, b in events:
-            self._steps.append(Step(kind, a, b))
-            if kind == "open" and b is not None:
-                self._open.add(frozenset((a, b)))
+        self._apply(events)
+        if not self.perfect:
+            self._apply(constraints.braid(
+                self._free, self._neighbours, self._open, self._rng
+            ))
         self._steps.append(Step("done", self.exit))
 
     def steps(self) -> Iterator[Step]:
