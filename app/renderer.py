@@ -9,6 +9,7 @@ from collections.abc import Callable
 from mlx import Mlx
 
 from app.keys import ACTIONS, LEGEND
+from app.palette import DEFAULT, PALETTES, Palette
 from mazegen import Coord, MazeGenerator
 
 WIDTH = 1280
@@ -29,24 +30,17 @@ MAX_TEXT = 60
 GLYPH_W = 10
 GLYPH_H = 20
 
-COLOR_BG = 0xFF1E1E28
-COLOR_WALL = 0xFFE0E0E8
-COLOR_FLOOR = 0xFF2A2A38
-COLOR_ENTRY = 0xFF4CAF50
-COLOR_EXIT = 0xFFE05252
-COLOR_PATH = 0xFF3A6EA5
-COLOR_GLYPH = 0xFF3FA796
-COLOR_LEGEND = 0xFFA0A0B0
-
 
 class Renderer:
     def __init__(
         self,
         maze: MazeGenerator,
         make_maze: Callable[[], MazeGenerator] | None = None,
+        palette: Palette = DEFAULT,
         title: str = "A-Maze-ing",
     ) -> None:
         self.maze = maze
+        self.palette = palette
         # Build a replacement maze when R is pressed. Without one the
         # renderer still works, it just cannot regenerate.
         self.make_maze = make_maze
@@ -105,24 +99,24 @@ class Renderer:
 
     def paint(self) -> None:
         """The outer square, filled with a full grid of walled cells."""
-        self.clear(COLOR_BG)
+        self.clear(self.palette.bg)
         x, y = self.origin_x, self.origin_y
-        self.fill_rect(x, y, self.side_w, self.side_h, COLOR_WALL)
+        self.fill_rect(x, y, self.side_w, self.side_h, self.palette.wall)
         self.fill_rect(
             x + self.wall, y + self.wall,
-            self.grid_w, self.grid_h, COLOR_FLOOR,
+            self.grid_w, self.grid_h, self.palette.floor,
         )
         grid = self.maze.grid
         for row in range(self.rows):
             for col in range(self.cols):
                 self.draw_cell(col, row, grid[row][col])
         for cell in self.maze.pattern_cells:
-            self.fill_floor(*cell, COLOR_GLYPH)
+            self.fill_floor(*cell, self.palette.glyph)
         if self.show_path:
             self.draw_path()
         # Painted after the path so entry and exit stay their own colours.
-        self.fill_floor(*self.maze.entry, COLOR_ENTRY)
-        self.fill_floor(*self.maze.exit, COLOR_EXIT)
+        self.fill_floor(*self.maze.entry, self.palette.entry)
+        self.fill_floor(*self.maze.exit, self.palette.exit)
         self.buf[:] = self.frame
 
     def centre(self, cell: Coord) -> Coord:
@@ -146,7 +140,7 @@ class Renderer:
             x, y = min(ax, bx), min(ay, by)
             self.fill_rect(
                 x - half, y - half,
-                abs(bx - ax) + width, abs(by - ay) + width, COLOR_PATH,
+                abs(bx - ax) + width, abs(by - ay) + width, self.palette.path,
             )
 
     def fill_floor(self, col: int, row: int, color: int) -> None:
@@ -161,15 +155,15 @@ class Renderer:
         x = self.origin_x + self.wall + col * self.cell
         y = self.origin_y + self.wall + row * self.cell
         size, t = self.cell, self.wall
-        self.fill_rect(x, y, size, size, COLOR_FLOOR)
+        self.fill_rect(x, y, size, size, self.palette.floor)
         if bits & WALL_N:
-            self.fill_rect(x, y, size, t, COLOR_WALL)
+            self.fill_rect(x, y, size, t, self.palette.wall)
         if bits & WALL_S:
-            self.fill_rect(x, y + size - t, size, t, COLOR_WALL)
+            self.fill_rect(x, y + size - t, size, t, self.palette.wall)
         if bits & WALL_W:
-            self.fill_rect(x, y, t, size, COLOR_WALL)
+            self.fill_rect(x, y, t, size, self.palette.wall)
         if bits & WALL_E:
-            self.fill_rect(x + size - t, y, t, size, COLOR_WALL)
+            self.fill_rect(x + size - t, y, t, size, self.palette.wall)
 
     def show(self) -> None:
         """Push the current image to the window, then the legend on top."""
@@ -192,7 +186,9 @@ class Renderer:
             MARGIN // 2,
             min(centred, WIDTH - MARGIN // 2 - len(text) * GLYPH_W),
         )
-        self.m.mlx_string_put(self.mlx, self.win, x, y, COLOR_LEGEND, text)
+        self.m.mlx_string_put(
+            self.mlx, self.win, x, y, self.palette.legend, text,
+        )
 
     def status(self) -> str:
         """What the view is showing. Kept short -- see MAX_TEXT."""
@@ -236,9 +232,10 @@ class Renderer:
         self.refresh()
 
     def cycle_palette(self) -> None:
-        # Needs more than one colour scheme to cycle through; that is task
-        # TODO when more pallettes
-        print("Cycle pallete called", flush=True)
+        """Step to the next colour scheme and redraw."""
+        nxt = (PALETTES.index(self.palette) + 1) % len(PALETTES)
+        self.palette = PALETTES[nxt]
+        self.refresh()
 
     def replay(self) -> None:
         # Replaying maze.steps() as an animation This function requires
