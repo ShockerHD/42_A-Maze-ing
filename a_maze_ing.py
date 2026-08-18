@@ -11,6 +11,7 @@ from pydantic import ValidationError
 from app.config import load_config
 from app.renderer import Renderer
 from mazegen import MazeGenerator
+from app.writer import write_maze
 
 DEFAULT_CONFIG = "config.txt"
 
@@ -45,7 +46,7 @@ def main(argv: list[str]) -> int:
         if seed is None:
             seed = random.SystemRandom().randrange(2 ** 32)
         print(f"seed: {seed}", flush=True)
-        return MazeGenerator(
+        maze = MazeGenerator(
             width=config.width,
             height=config.height,
             entry=config.entry,
@@ -54,6 +55,16 @@ def main(argv: list[str]) -> int:
             seed=seed,
             algorithm=config.algorithm,
         )
+        return maze
+
+    def regenerate() -> MazeGenerator:
+        maze = make_maze()
+        try:
+            write_maze(maze, config.output_file)
+        except OSError as error:
+            print(f"warning: cannot write {config.output_file}: "
+                  f"{error.strerror}", file=sys.stderr)
+        return maze
 
     try:
         maze = make_maze()
@@ -62,7 +73,14 @@ def main(argv: list[str]) -> int:
         return EXIT_ERROR
 
     try:
-        Renderer(maze, make_maze).run()
+        write_maze(maze, config.output_file)
+    except OSError as error:
+        print(f"error: cannot write {config.output_file}: {error.strerror}",
+              file=sys.stderr)
+        return EXIT_ERROR
+
+    try:
+        Renderer(maze, regenerate).run()
     except SystemExit as error:
         print(f"error: {error}", file=sys.stderr)
         return EXIT_ERROR
