@@ -108,8 +108,6 @@ SPRING = Palette(
 )
 
 # colorhunt.co/palette/0c2c55296374629fadededce
-# All four are cool, so entry and exit would be hard to tell apart -- the
-# exit borrows a frost rose to keep the two endpoints distinct.
 WINTER = Palette(
     name="winter",
     bg=0xFF081A30,
