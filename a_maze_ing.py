@@ -55,6 +55,9 @@ def main(argv: list[str]) -> int:
             seed=seed,
             algorithm=config.algorithm,
         )
+        if maze.pattern_skipped:
+            print(f"warning: '42' pattern omitted: "
+                  f"{maze.pattern_skipped}", file=sys.stderr)
         return maze
 
     def regenerate() -> MazeGenerator:

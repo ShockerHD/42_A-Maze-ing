@@ -7,7 +7,13 @@ from dataclasses import dataclass
 from typing import Iterator, Literal
 
 from mazegen import algorithms, constraints, solver
-from mazegen.pattern import glyph_cells, splits_grid
+from mazegen.pattern import (
+    MIN_HEIGHT,
+    MIN_WIDTH,
+    fits,
+    glyph_cells,
+    splits_grid,
+)
 
 __all__ = [
     "Coord", "Event", "Step", "StepKind", "MazeGenerator",
@@ -101,6 +107,7 @@ class MazeGenerator:
         self._open: set[frozenset[Coord]] = set()
         self._steps: list[Step] = []
         self._solution: list[Coord] | None = None
+        self._pattern_skipped: str | None = None
         self._pattern = self._glyph_mask()
         self._free = frozenset(
             (x, y)
@@ -117,11 +124,18 @@ class MazeGenerator:
         return 0 <= x < width and 0 <= y < height
 
     def _glyph_mask(self) -> frozenset[Coord]:
-        """The '42' cells to keep out of the maze"""
+        """The '42' cells to keep out of the maze."""
+        if not fits(self.width, self.height):
+            self._pattern_skipped = (
+                f"maze is smaller than {MIN_WIDTH}x{MIN_HEIGHT}"
+            )
+            return frozenset()
         mask = glyph_cells(self.width, self.height)
         if mask & {self.entry, self.exit}:
+            self._pattern_skipped = "entry or exit falls inside it"
             return frozenset()
         if splits_grid(self.width, self.height, mask, self.entry, self.exit):
+            self._pattern_skipped = "it would disconnect the maze"
             return frozenset()
         return mask
 
@@ -207,6 +221,11 @@ class MazeGenerator:
     def pattern_cells(self) -> frozenset[Coord]:
         """Cells forming the '42' glyph. Empty if the glyph was skipped."""
         return self._pattern
+
+    @property
+    def pattern_skipped(self) -> str | None:
+        """Why the '42' glyph was dropped, or None if it was drawn."""
+        return self._pattern_skipped
 
     @property
     def seed(self) -> int:
