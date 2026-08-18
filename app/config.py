@@ -23,7 +23,7 @@ class MazeConfig(BaseModel):
     height: int = Field(alias="HEIGHT", ge=2)
     entry: Coord = Field(alias="ENTRY")
     exit: Coord = Field(alias="EXIT")
-    output_file: Path = Field(alias="OUTPUT_FILE")
+    output_file: str = Field(alias="OUTPUT_FILE")
     perfect: bool = Field(alias="PERFECT")
     seed: int | None = Field(alias="SEED", default=None)
     algorithm: Literal["kruskal", "dfs"] = Field(
