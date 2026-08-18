@@ -14,7 +14,7 @@ def format_maze(maze: MazeGenerator) -> str:
     return (f"{rows}\n\n"
             f"{entry_x},{entry_y}\n"
             f"{exit_x},{exit_y}\n"
-            f"{maze.solution_string}")
+            f"{maze.solution_string}\n")
 
 
 def write_maze(maze: MazeGenerator, path: str) -> None:
