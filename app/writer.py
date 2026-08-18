@@ -17,6 +17,6 @@ def format_maze(maze: MazeGenerator) -> str:
             f"{maze.solution_string}")
 
 
-def write_maze(maze: MazeGenerator, path: str):
+def write_maze(maze: MazeGenerator, path: str) -> None:
     with open(path, "w", encoding="utf-8") as out:
         out.write(format_maze(maze))
