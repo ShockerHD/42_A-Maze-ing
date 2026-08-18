@@ -161,6 +161,8 @@ class MazeGenerator:
             events = algorithms.kruskal(
                 self._free, self._neighbours, self._rng
             )
+        else:
+            raise ValueError(f"unknown algorithm {self.algorithm}")
 
         self._rng.seed(self._seed)
         self._open.clear()
