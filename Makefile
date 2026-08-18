@@ -17,7 +17,7 @@ debug:
 
 clean:
 	find . -type d -name '__pycache__' -prune -exec rm -rf {} +
-	rm -rf .mypy_cache .pytest_cache .venv uv.lock maze_out.txt
+	rm -rf .mypy_cache .pytest_cache .venv maze_out.txt
 
 lint:
 	uv run flake8 .
