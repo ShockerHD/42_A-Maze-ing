@@ -4,4 +4,6 @@ ENTRY=0,0
 EXIT=14,14
 OUTPUT_FILE=maze_out.txt
 PERFECT=TRUE
-ALGORITHM=dfs #kruskal
+ALGORITHM=dfs
+# ALGORITHM=kruskal
+# SEED=1
