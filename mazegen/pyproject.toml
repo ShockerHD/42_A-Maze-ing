@@ -1,0 +1,34 @@
+#     uv run python -m build --outdir ..
+
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mazegen"
+description = "Reusable maze generator: perfect or braided grid mazes with a '42' glyph"
+readme = "usage.md"
+requires-python = ">=3.10"
+authors = [{ name = "Jannis Karl" }]
+keywords = ["maze", "generator", "dfs", "kruskal", "42"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Topic :: Games/Entertainment :: Puzzle Games",
+    "Typing :: Typed",
+]
+
+dependencies = []
+dynamic = ["version"]
+
+[dependency-groups]
+dev = ["build>=1.5.0"]
+
+[tool.uv]
+package = false
+
+[tool.setuptools]
+package-dir = { mazegen = "." }
+packages = ["mazegen"]
+
+[tool.setuptools.dynamic]
+version = { attr = "mazegen.__version__" }

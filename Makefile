@@ -15,9 +15,12 @@ run:
 debug:
 	uv run python -m pdb a_maze_ing.py config.txt
 
+build:
+	cd mazegen && uv run python -m build --outdir ..
+
 clean:
 	find . -type d -name '__pycache__' -prune -exec rm -rf {} +
-	rm -rf .mypy_cache .pytest_cache .venv maze_out.txt
+	rm -rf .mypy_cache .pytest_cache .venv maze_out.txt mazegen/mazegen.egg-info mazegen/.venv
 
 lint:
 	uv run flake8 .
@@ -28,4 +31,4 @@ lint-strict:
 	uv run flake8 .
 	uv run mypy . --strict
 
-.PHONY: install run debug clean lint lint-strict
+.PHONY: install run debug build clean lint lint-strict
