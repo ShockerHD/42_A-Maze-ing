@@ -30,5 +30,8 @@ package = false
 package-dir = { mazegen = "." }
 packages = ["mazegen"]
 
+[tool.setuptools.package-data]
+mazegen = ["usage.md"]
+
 [tool.setuptools.dynamic]
 version = { attr = "mazegen.__version__" }
