@@ -30,5 +30,5 @@ LEGEND: tuple[tuple[str, str], ...] = (
     ("P", "path"),
     ("C", "colours"),
     ("SPC", "replay"),
-    ("ESC", "quit"),
+    ("ESC+Q", "exit"),
 )
