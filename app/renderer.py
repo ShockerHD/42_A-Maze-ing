@@ -8,7 +8,9 @@ from collections.abc import Callable
 
 from mlx import Mlx
 
+from app.font import GLYPH_H, GLYPH_W, Font
 from app.keys import ACTIONS, LEGEND
+from app.palette import DEFAULT, PALETTES, Palette
 from mazegen import Coord, MazeGenerator
 
 WIDTH = 1280
@@ -24,19 +26,10 @@ WALL_W = 8
 
 EVENT_CLIENT_MESSAGE = 33  # X11 ClientMessage -> WM close button
 
-MAX_TEXT = 60
-
-GLYPH_W = 10
-GLYPH_H = 20
-
-COLOR_BG = 0xFF1E1E28
-COLOR_WALL = 0xFFE0E0E8
-COLOR_FLOOR = 0xFF2A2A38
-COLOR_ENTRY = 0xFF4CAF50
-COLOR_EXIT = 0xFFE05252
-COLOR_PATH = 0xFF3A6EA5
-COLOR_GLYPH = 0xFF3FA796
-COLOR_LEGEND = 0xFFA0A0B0
+# The legend is drawn into the frame, so the only cap left is the frame's own
+# width -- mlx_string_put() used to cost one draw call per character, and the
+# backend has 64 per frame for the whole screen.
+MAX_TEXT = (WIDTH - MARGIN) // GLYPH_W
 
 
 class Renderer:
@@ -44,9 +37,11 @@ class Renderer:
         self,
         maze: MazeGenerator,
         make_maze: Callable[[], MazeGenerator] | None = None,
+        palette: Palette = DEFAULT,
         title: str = "A-Maze-ing",
     ) -> None:
         self.maze = maze
+        self.palette = palette
         # Build a replacement maze when R is pressed. Without one the
         # renderer still works, it just cannot regenerate.
         self.make_maze = make_maze
@@ -54,6 +49,7 @@ class Renderer:
         self.m = Mlx()
         self.mlx = self.m.mlx_init()
         self.win = self.m.mlx_new_window(self.mlx, WIDTH, HEIGHT, title)
+        self.font = Font(self.m, self.mlx)
         self.img = self.m.mlx_new_image(self.mlx, WIDTH, HEIGHT)
         self.buf, self.bpp, self.size_line, self.fmt = \
             self.m.mlx_get_data_addr(self.img)
@@ -104,26 +100,31 @@ class Renderer:
             self.frame[start:start + len(row)] = row
 
     def paint(self) -> None:
+        """One whole frame: the maze, the legend on top, then out to MLX."""
+        self.draw_maze()
+        self.draw_legend()
+        self.buf[:] = self.frame
+
+    def draw_maze(self) -> None:
         """The outer square, filled with a full grid of walled cells."""
-        self.clear(COLOR_BG)
+        self.clear(self.palette.bg)
         x, y = self.origin_x, self.origin_y
-        self.fill_rect(x, y, self.side_w, self.side_h, COLOR_WALL)
+        self.fill_rect(x, y, self.side_w, self.side_h, self.palette.wall)
         self.fill_rect(
             x + self.wall, y + self.wall,
-            self.grid_w, self.grid_h, COLOR_FLOOR,
+            self.grid_w, self.grid_h, self.palette.floor,
         )
         grid = self.maze.grid
         for row in range(self.rows):
             for col in range(self.cols):
                 self.draw_cell(col, row, grid[row][col])
         for cell in self.maze.pattern_cells:
-            self.fill_floor(*cell, COLOR_GLYPH)
+            self.fill_floor(*cell, self.palette.glyph)
         if self.show_path:
             self.draw_path()
         # Painted after the path so entry and exit stay their own colours.
-        self.fill_floor(*self.maze.entry, COLOR_ENTRY)
-        self.fill_floor(*self.maze.exit, COLOR_EXIT)
-        self.buf[:] = self.frame
+        self.fill_floor(*self.maze.entry, self.palette.entry)
+        self.fill_floor(*self.maze.exit, self.palette.exit)
 
     def centre(self, cell: Coord) -> Coord:
         """Pixel centre of a cell."""
@@ -146,7 +147,7 @@ class Renderer:
             x, y = min(ax, bx), min(ay, by)
             self.fill_rect(
                 x - half, y - half,
-                abs(bx - ax) + width, abs(by - ay) + width, COLOR_PATH,
+                abs(bx - ax) + width, abs(by - ay) + width, self.palette.path,
             )
 
     def fill_floor(self, col: int, row: int, color: int) -> None:
@@ -161,20 +162,44 @@ class Renderer:
         x = self.origin_x + self.wall + col * self.cell
         y = self.origin_y + self.wall + row * self.cell
         size, t = self.cell, self.wall
-        self.fill_rect(x, y, size, size, COLOR_FLOOR)
+        self.fill_rect(x, y, size, size, self.palette.floor)
         if bits & WALL_N:
-            self.fill_rect(x, y, size, t, COLOR_WALL)
+            self.fill_rect(x, y, size, t, self.palette.wall)
         if bits & WALL_S:
-            self.fill_rect(x, y + size - t, size, t, COLOR_WALL)
+            self.fill_rect(x, y + size - t, size, t, self.palette.wall)
         if bits & WALL_W:
-            self.fill_rect(x, y, t, size, COLOR_WALL)
+            self.fill_rect(x, y, t, size, self.palette.wall)
         if bits & WALL_E:
-            self.fill_rect(x + size - t, y, t, size, COLOR_WALL)
+            self.fill_rect(x + size - t, y, t, size, self.palette.wall)
 
     def show(self) -> None:
-        """Push the current image to the window, then the legend on top."""
+        """Push the frame to the window -- one draw call for the lot."""
         self.m.mlx_put_image_to_window(self.mlx, self.win, self.img, 0, 0)
-        self.draw_legend()
+
+    def draw_glyph(self, x: int, y: int, char: str, color: int) -> None:
+        """One character, blended into the frame and clipped to the window."""
+        ink = color.to_bytes(self.px_bytes, "little")
+        mask = self.font.coverage(char)
+        for row in range(max(0, -y), min(GLYPH_H, HEIGHT - y)):
+            line = (y + row) * self.size_line
+            for col in range(max(0, -x), min(GLYPH_W, WIDTH - x)):
+                alpha = mask[row * GLYPH_W + col]
+                at = line + (x + col) * self.px_bytes
+                if alpha == 0xFF:
+                    self.frame[at:at + self.px_bytes] = ink
+                elif alpha:
+                    # An antialiased edge: mix ink into what is underneath.
+                    rest = 0xFF - alpha
+                    for byte in range(self.px_bytes):
+                        self.frame[at + byte] = (
+                            ink[byte] * alpha + self.frame[at + byte] * rest
+                        ) // 0xFF
+
+    def draw_text(self, x: int, y: int, text: str, color: int) -> None:
+        """A string, left to right from its top-left corner."""
+        for char in text:
+            self.draw_glyph(x, y, char, color)
+            x += GLYPH_W
 
     def draw_legend(self) -> None:
         """
@@ -192,11 +217,12 @@ class Renderer:
             MARGIN // 2,
             min(centred, WIDTH - MARGIN // 2 - len(text) * GLYPH_W),
         )
-        self.m.mlx_string_put(self.mlx, self.win, x, y, COLOR_LEGEND, text)
+        self.draw_text(x, y, text, self.palette.legend)
 
     def status(self) -> str:
-        """What the view is showing. Kept short -- see MAX_TEXT."""
-        return f"{self.cols}x{self.rows}"
+        """What the view is showing, ahead of the key hints."""
+        path = "on" if self.show_path else "off"
+        return f"{self.cols}x{self.rows} {self.palette.name} path:{path}"
 
     def refresh(self) -> None:
         """Rebuild the frame and show it -- for anything that changes state."""
@@ -236,9 +262,10 @@ class Renderer:
         self.refresh()
 
     def cycle_palette(self) -> None:
-        # Needs more than one colour scheme to cycle through; that is task
-        # TODO when more pallettes
-        print("Cycle pallete called", flush=True)
+        """Step to the next colour scheme and redraw."""
+        nxt = (PALETTES.index(self.palette) + 1) % len(PALETTES)
+        self.palette = PALETTES[nxt]
+        self.refresh()
 
     def replay(self) -> None:
         # Replaying maze.steps() as an animation This function requires
