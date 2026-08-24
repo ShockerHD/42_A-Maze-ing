@@ -60,28 +60,15 @@ class Renderer:
     ) -> None:
         self.maze = maze
         self.palette = palette
-        # Build a replacement maze when R is pressed. Without one the
-        # renderer still works, it just cannot regenerate.
         self.make_maze = make_maze
-        # The stripe is a tween rather than a flag: hidden at 0, shown at
-        # 1, and reversible from wherever it happens to be.
         self.path = Tween(PATH_SECONDS, progress=0.0, forward=False)
-        # How many cells of the stripe are on screen, so a frame can
-        # extend or trim it instead of redrawing the whole route.
         self.path_drawn = 0
-        # A cross-fade shows a blended palette that is in no PALETTES, so
-        # the cycle position is tracked as an index rather than read back
-        # off whatever is currently on screen.
         self.palette_index = PALETTES.index(palette) if palette in PALETTES \
             else 0
         self.fade_from = palette
         self.fade: Tween | None = None
         self.clock = Clock()
         self._elapsed = 0.0
-        # While the carve is being replayed the finished maze is not what
-        # the window shows: `live` is the grid built up so far, and `head`
-        # is the cell the algorithm is working on. Both are None the rest
-        # of the time, and that is what "not animating" means here.
         self.live: list[list[int]] | None = None
         self.head: Coord | None = None
         self.generation: EventStream[Step] | None = None
@@ -173,11 +160,8 @@ class Renderer:
         return self.maze.grid if self.live is None else self.live
 
     def repaint_cell(self, cell: Coord, accent: int | None = None) -> None:
-        """Redraw one cell in place.
+        # Redraw one cell in place.
 
-        0.02ms against ~12ms for a whole frame, which is the difference
-        between an animation that runs at 60fps and one that crawls.
-        """
         col, row = cell
         self.draw_cell(col, row, self.grid_now()[row][col])
         if accent is not None:
@@ -207,10 +191,8 @@ class Renderer:
         self.draw_path_segments(1, self.path_drawn)
 
     def draw_path_segments(self, first: int, last: int) -> None:
-        """Stripe the route from cell *first* - 1 up to cell *last* - 1.
-
-        One rect per step, centre to centre. Each covers both endpoints,
-        so turns join up without a separate corner piece.
+        """
+        Stripe the route from cell *first* - 1 up to cell *last* - 1.
         """
         path = self.maze.solution
         width = max(2, self.cell // 6)
@@ -225,7 +207,7 @@ class Renderer:
             )
 
     def advance_path(self) -> None:
-        """Extend or trim the stripe in place to match the tween."""
+        # Extend or trim the stripe in place to match the tween.
         want = self.path_length()
         if want > self.path_drawn:
             # Only the newly revealed steps -- the rest is already drawn.
@@ -446,21 +428,11 @@ class Renderer:
         self.refresh()
 
     def toggle_path(self) -> None:
-        """Reveal or hide the solution.
-
-        Reverses from the current progress rather than restarting, so a
-        toggle pressed mid-reveal folds the stripe back from where it
-        actually is instead of snapping to the far end first.
-        """
+        # Reveal or hide the solution.
         self.path.reverse()
 
     def cycle_palette(self) -> None:
-        """Cross-fade to the next colour scheme.
-
-        Pressing C again mid-fade starts the next one from the blend
-        currently on screen, so a fast cycle runs the colours together
-        instead of snapping back to a scheme boundary each time.
-        """
+        # Cross-fade to the next colour scheme.
         self.fade_from = self.palette
         self.palette_index = (self.palette_index + 1) % len(PALETTES)
         self.fade = Tween(FADE_SECONDS)
@@ -471,12 +443,9 @@ class Renderer:
             return
         target = PALETTES[self.palette_index]
         if self.fade.done:
-            # Land exactly on the scheme, not on a rounded-off blend.
             self.palette, self.fade = target, None
         else:
             self.palette = blend(self.fade_from, target, self.fade.eased)
-        # Every colour on screen just changed, so this is the one
-        # animation that cannot patch: it repaints the whole frame.
         self.paint()
 
     def replay(self) -> None:
