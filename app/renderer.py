@@ -12,7 +12,7 @@ from mlx import Mlx
 from app.animation import Clock, EventStream, Tween
 from app.font import GLYPH_H, GLYPH_W, Font
 from app.keys import ACTIONS, LEGEND
-from app.palette import DEFAULT, PALETTES, Palette
+from app.palette import DEFAULT, PALETTES, Palette, blend
 from mazegen import ALL_WALLS, BIT, Coord, MazeGenerator, Step
 
 WIDTH = 1280
@@ -41,6 +41,9 @@ GENERATION_SECONDS = 2.5
 # How long the solution takes to draw itself in, entry to exit.
 PATH_SECONDS = 0.8
 
+# How long one colour scheme takes to become the next.
+FADE_SECONDS = 0.45
+
 # The legend is drawn into the frame, so the only cap left is the frame's own
 # width -- mlx_string_put() used to cost one draw call per character, and the
 # backend has 64 per frame for the whole screen.
@@ -66,6 +69,13 @@ class Renderer:
         # How many cells of the stripe are on screen, so a frame can
         # extend or trim it instead of redrawing the whole route.
         self.path_drawn = 0
+        # A cross-fade shows a blended palette that is in no PALETTES, so
+        # the cycle position is tracked as an index rather than read back
+        # off whatever is currently on screen.
+        self.palette_index = PALETTES.index(palette) if palette in PALETTES \
+            else 0
+        self.fade_from = palette
+        self.fade: Tween | None = None
         self.clock = Clock()
         self._elapsed = 0.0
         # While the carve is being replayed the finished maze is not what
@@ -378,7 +388,7 @@ class Renderer:
         the screen.
         """
         running = False
-        for animation in (self.generation, self.path):
+        for animation in (self.generation, self.path, self.fade):
             if animation is not None and not animation.done:
                 animation.update(dt)
                 running = True
@@ -398,6 +408,8 @@ class Renderer:
             return
         if self.generation is not None and self.generation.done:
             self.end_generation()
+        elif self.fade is not None:
+            self.advance_fade()
         else:
             if self.live is None:
                 self.advance_path()
@@ -443,10 +455,29 @@ class Renderer:
         self.path.reverse()
 
     def cycle_palette(self) -> None:
-        """Step to the next colour scheme and redraw."""
-        nxt = (PALETTES.index(self.palette) + 1) % len(PALETTES)
-        self.palette = PALETTES[nxt]
-        self.refresh()
+        """Cross-fade to the next colour scheme.
+
+        Pressing C again mid-fade starts the next one from the blend
+        currently on screen, so a fast cycle runs the colours together
+        instead of snapping back to a scheme boundary each time.
+        """
+        self.fade_from = self.palette
+        self.palette_index = (self.palette_index + 1) % len(PALETTES)
+        self.fade = Tween(FADE_SECONDS)
+
+    def advance_fade(self) -> None:
+        """Recolour everything to the current point of the fade."""
+        if self.fade is None:
+            return
+        target = PALETTES[self.palette_index]
+        if self.fade.done:
+            # Land exactly on the scheme, not on a rounded-off blend.
+            self.palette, self.fade = target, None
+        else:
+            self.palette = blend(self.fade_from, target, self.fade.eased)
+        # Every colour on screen just changed, so this is the one
+        # animation that cannot patch: it repaints the whole frame.
+        self.paint()
 
     def replay(self) -> None:
         """Watch the same maze being carved again."""
