@@ -1,12 +1,16 @@
 """
 
-Animation primitives: a frame clock, easing, and interruptible tweens.
+Animation primitives: a frame clock, easing, and the two things that move.
 
 """
 
 import time
+from collections.abc import Callable, Sequence
+from typing import Generic, TypeVar
 
-__all__ = ["Clock", "Tween", "lerp_color", "smoothstep"]
+__all__ = ["Clock", "EventStream", "Tween", "lerp_color", "smoothstep"]
+
+T = TypeVar("T")
 
 # A stalled window (dragged, or a slow regenerate) hands the loop hook a
 # huge dt. Capping it makes an animation pause rather than teleport.
@@ -93,4 +97,50 @@ class Tween:
         self.progress = clamp(
             self.progress + (step if self.forward else -step)
         )
+        return self.done
+
+
+class EventStream(Generic[T]):
+    """Play *events* evenly across *duration* seconds.
+
+    Paced by how much of the duration has passed rather than one event
+    per frame, so a 15x15 maze (615 events) and a 60x40 one (9277) take
+    the same time to draw. One per frame looks right at the small size
+    and takes forever at the large one.
+    """
+
+    def __init__(
+        self,
+        events: Sequence[T],
+        duration: float,
+        apply: Callable[[T], None],
+    ) -> None:
+        self.events = events
+        self.duration = max(duration, 1e-6)
+        self.apply = apply
+        self.elapsed = 0.0
+        self.index = 0
+
+    @property
+    def progress(self) -> float:
+        """How much of the list has been played."""
+        return self.index / len(self.events) if self.events else 1.0
+
+    @property
+    def done(self) -> bool:
+        return self.index >= len(self.events)
+
+    def update(self, dt: float) -> bool:
+        """Play whatever events the time so far has earned.
+
+        How far through the duration are we? Play up to that share of the
+        list. Counting from elapsed time rather than per-frame leftovers
+        means a frame too short for a whole event still adds up.
+        """
+        self.elapsed += dt
+        share = clamp(self.elapsed / self.duration)
+        upto = round(share * len(self.events))
+        while self.index < upto:
+            self.apply(self.events[self.index])
+            self.index += 1
         return self.done
