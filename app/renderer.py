@@ -429,6 +429,8 @@ class Renderer:
             self.maze = self.make_maze()
             # A replacement maze may be a different shape, so re-fit first.
             self.fit()
+            self.animate_generation()
+            return
         self.refresh()
 
     def toggle_path(self) -> None:
@@ -447,11 +449,8 @@ class Renderer:
         self.refresh()
 
     def replay(self) -> None:
-        # Replaying maze.steps() as an animation This function requires
-        # animation, which is in further steps in our plan
-        steps = sum(1 for _ in self.maze.steps())
-        print(f"replay: {steps} steps recorded, ano animation yet ;(",
-              flush=True)
+        """Watch the same maze being carved again."""
+        self.animate_generation()
 
     def run(self) -> None:
         self.animate_generation()
