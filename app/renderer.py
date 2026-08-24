@@ -5,13 +5,15 @@ MLX renderer: draw a generated maze.
 """
 
 from collections.abc import Callable
+from math import ceil
 
 from mlx import Mlx
 
+from app.animation import Clock, EventStream, Tween
 from app.font import GLYPH_H, GLYPH_W, Font
 from app.keys import ACTIONS, LEGEND
-from app.palette import DEFAULT, PALETTES, Palette
-from mazegen import Coord, MazeGenerator
+from app.palette import DEFAULT, PALETTES, Palette, blend
+from mazegen import ALL_WALLS, BIT, Coord, MazeGenerator, Step
 
 WIDTH = 1280
 HEIGHT = 720
@@ -25,6 +27,22 @@ WALL_S = 4
 WALL_W = 8
 
 EVENT_CLIENT_MESSAGE = 33  # X11 ClientMessage -> WM close button
+
+# MLX calls the loop hook as fast as it can, which is far more often than a
+# repaint is worth. Frames are batched up to this interval instead; the dt
+# still adds up, so animations keep real-time pace either way.
+FRAME = 1.0 / 60.0
+
+# How long the carve takes to replay, whatever the maze's size. Pacing by
+# duration rather than one-event-per-frame is what keeps a 15x15 and a
+# 60x40 maze watchable at the same speed.
+GENERATION_SECONDS = 2.5
+
+# How long the solution takes to draw itself in, entry to exit.
+PATH_SECONDS = 0.8
+
+# How long one colour scheme takes to become the next.
+FADE_SECONDS = 0.45
 
 # The legend is drawn into the frame, so the only cap left is the frame's own
 # width -- mlx_string_put() used to cost one draw call per character, and the
@@ -42,10 +60,18 @@ class Renderer:
     ) -> None:
         self.maze = maze
         self.palette = palette
-        # Build a replacement maze when R is pressed. Without one the
-        # renderer still works, it just cannot regenerate.
         self.make_maze = make_maze
-        self.show_path = False
+        self.path = Tween(PATH_SECONDS, progress=0.0, forward=False)
+        self.path_drawn = 0
+        self.palette_index = PALETTES.index(palette) if palette in PALETTES \
+            else 0
+        self.fade_from = palette
+        self.fade: Tween | None = None
+        self.clock = Clock()
+        self._elapsed = 0.0
+        self.live: list[list[int]] | None = None
+        self.head: Coord | None = None
+        self.generation: EventStream[Step] | None = None
         self.m = Mlx()
         self.mlx = self.m.mlx_init()
         self.win = self.m.mlx_new_window(self.mlx, WIDTH, HEIGHT, title)
@@ -114,17 +140,38 @@ class Renderer:
             x + self.wall, y + self.wall,
             self.grid_w, self.grid_h, self.palette.floor,
         )
-        grid = self.maze.grid
+        grid = self.grid_now()
         for row in range(self.rows):
             for col in range(self.cols):
                 self.draw_cell(col, row, grid[row][col])
         for cell in self.maze.pattern_cells:
             self.fill_floor(*cell, self.palette.glyph)
-        if self.show_path:
+        # Mid-carve there is no maze to solve yet, so the stripe waits.
+        if self.live is None and self.path.progress > 0.0:
             self.draw_path()
         # Painted after the path so entry and exit stay their own colours.
         self.fill_floor(*self.maze.entry, self.palette.entry)
         self.fill_floor(*self.maze.exit, self.palette.exit)
+        if self.head is not None:
+            self.fill_floor(*self.head, self.palette.path)
+
+    def grid_now(self) -> list[list[int]]:
+        """The walls to draw: the carve so far, or the finished maze."""
+        return self.maze.grid if self.live is None else self.live
+
+    def repaint_cell(self, cell: Coord, accent: int | None = None) -> None:
+        # Redraw one cell in place.
+
+        col, row = cell
+        self.draw_cell(col, row, self.grid_now()[row][col])
+        if accent is not None:
+            self.fill_floor(col, row, accent)
+        elif cell in self.maze.pattern_cells:
+            self.fill_floor(col, row, self.palette.glyph)
+        elif cell == self.maze.entry:
+            self.fill_floor(col, row, self.palette.entry)
+        elif cell == self.maze.exit:
+            self.fill_floor(col, row, self.palette.exit)
 
     def centre(self, cell: Coord) -> Coord:
         """Pixel centre of a cell."""
@@ -134,21 +181,43 @@ class Renderer:
             self.origin_y + self.wall + row * self.cell + self.cell // 2,
         )
 
+    def path_length(self) -> int:
+        """How many cells of the solution the tween is asking for."""
+        return ceil(self.path.eased * len(self.maze.solution))
+
     def draw_path(self) -> None:
-        """A stripe down the middle of the entry-to-exit route."""
+        """The stripe, drawn as far as the tween has got."""
+        self.path_drawn = self.path_length()
+        self.draw_path_segments(1, self.path_drawn)
+
+    def draw_path_segments(self, first: int, last: int) -> None:
+        """
+        Stripe the route from cell *first* - 1 up to cell *last* - 1.
+        """
         path = self.maze.solution
         width = max(2, self.cell // 6)
         half = width // 2
-        # One rect per step, centre to centre. Each covers both endpoints,
-        # so turns join up without a separate corner piece.
-        for before, after in zip(path, path[1:]):
-            ax, ay = self.centre(before)
-            bx, by = self.centre(after)
+        for index in range(first, last):
+            ax, ay = self.centre(path[index - 1])
+            bx, by = self.centre(path[index])
             x, y = min(ax, bx), min(ay, by)
             self.fill_rect(
                 x - half, y - half,
                 abs(bx - ax) + width, abs(by - ay) + width, self.palette.path,
             )
+
+    def advance_path(self) -> None:
+        # Extend or trim the stripe in place to match the tween.
+        want = self.path_length()
+        if want > self.path_drawn:
+            # Only the newly revealed steps -- the rest is already drawn.
+            self.draw_path_segments(max(self.path_drawn, 1), want)
+        elif want < self.path_drawn:
+            # Cells tile the grid exactly, so repainting the ones that
+            # lost the stripe erases it, gap between cells included.
+            for cell in self.maze.solution[want:self.path_drawn]:
+                self.repaint_cell(cell)
+        self.path_drawn = want
 
     def fill_floor(self, col: int, row: int, color: int) -> None:
         """Recolour a cell's floor, leaving its four walls as they are."""
@@ -171,6 +240,58 @@ class Renderer:
             self.fill_rect(x, y, t, size, self.palette.wall)
         if bits & WALL_E:
             self.fill_rect(x + size - t, y, t, size, self.palette.wall)
+
+    def animate_generation(self) -> None:
+        """Replay the carve from an all-walls-closed grid."""
+        self.live = [[ALL_WALLS] * self.cols for _ in range(self.rows)]
+        self.head = None
+        # steps() is replayable and does not re-randomise, so this can be
+        # restarted as often as the user likes without touching the maze.
+        self.generation = EventStream(
+            list(self.maze.steps()), GENERATION_SECONDS, self.apply_step,
+        )
+        self.refresh()
+
+    def end_generation(self) -> None:
+        """Drop back to showing the finished maze."""
+        self.generation = None
+        self.live = None
+        self.head = None
+        self.paint()
+
+    def carve(self, a: Coord, b: Coord) -> None:
+        """Open the wall between two cells in the live grid."""
+        if self.live is None:
+            return
+        (ax, ay), (bx, by) = a, b
+        self.live[ay][ax] &= ~BIT[(bx - ax, by - ay)]
+        self.live[by][bx] &= ~BIT[(ax - bx, ay - by)]
+        self.repaint_cell(a)
+        self.repaint_cell(b)
+
+    @staticmethod
+    def head_of(step: Step) -> Coord | None:
+        """The cell to highlight for *step*.
+
+        Kruskal's consider/reject and DFS's visit/backtrack are what make
+        the two algorithms look different while they run, so they move the
+        highlight even though they open nothing.
+        """
+        if step.kind == "done":
+            return None
+        if step.kind == "backtrack":
+            return step.a
+        return step.a if step.b is None else step.b
+
+    def apply_step(self, step: Step) -> None:
+        """One generation event: carve it, then move the highlight."""
+        if step.kind == "open" and step.b is not None:
+            self.carve(step.a, step.b)
+        stale, self.head = self.head, self.head_of(step)
+        if stale is not None and stale != self.head:
+            self.repaint_cell(stale)
+        if self.head is not None:
+            self.repaint_cell(self.head, self.palette.path)
 
     def show(self) -> None:
         """Push the frame to the window -- one draw call for the lot."""
@@ -212,6 +333,9 @@ class Renderer:
             self.origin_y + self.side_h + (MARGIN - GLYPH_H) // 2,
             HEIGHT - GLYPH_H,
         )
+        # The band is wiped first: an animating status redraws this every
+        # frame, and glyphs blended over their own leftovers turn to mush.
+        self.fill_rect(0, y, WIDTH, GLYPH_H, self.palette.bg)
         centred = self.origin_x + (self.side_w - len(text) * GLYPH_W) // 2
         x = max(
             MARGIN // 2,
@@ -221,8 +345,12 @@ class Renderer:
 
     def status(self) -> str:
         """What the view is showing, ahead of the key hints."""
-        path = "on" if self.show_path else "off"
-        return f"{self.cols}x{self.rows} {self.palette.name} path:{path}"
+        head = f"{self.cols}x{self.rows} {self.palette.name}"
+        if self.generation is not None:
+            return (f"{head} {self.maze.algorithm} "
+                    f"{self.generation.progress:.0%}")
+        path = "on" if self.path.forward else "off"
+        return f"{head} path:{path}"
 
     def refresh(self) -> None:
         """Rebuild the frame and show it -- for anything that changes state."""
@@ -231,6 +359,47 @@ class Renderer:
 
     def on_expose(self, _param: object) -> None:
         # The first paint has to reach the window from inside the loop.
+        self.show()
+
+    def advance(self, dt: float) -> bool:
+        """Move whichever animations are running on by *dt* seconds.
+
+        Returns True if any of them ran, which is the same as asking
+        whether the window needs drawing again. An animation that
+        finishes on this frame still counts: its last state has to reach
+        the screen.
+        """
+        running = False
+        for animation in (self.generation, self.path, self.fade):
+            if animation is not None and not animation.done:
+                animation.update(dt)
+                running = True
+        return running
+
+    def on_frame(self, _param: object) -> None:
+        """Advance the animations. Must return promptly, every time.
+
+        Sleeping in here would freeze the window and swallow key events,
+        so an idle frame does nothing but read the clock.
+        """
+        self._elapsed += self.clock.tick()
+        if self._elapsed < FRAME:
+            return
+        dt, self._elapsed = self._elapsed, 0.0
+        if not self.advance(dt):
+            return
+        if self.generation is not None and self.generation.done:
+            self.end_generation()
+        elif self.fade is not None:
+            self.advance_fade()
+        else:
+            if self.live is None:
+                self.advance_path()
+            # The animation already patched every cell it touched, so the
+            # rest of the frame still stands: only the legend and the
+            # blit are left to do.
+            self.draw_legend()
+            self.buf[:] = self.frame
         self.show()
 
     def on_close(self, _param: object) -> None:
@@ -254,30 +423,40 @@ class Renderer:
             self.maze = self.make_maze()
             # A replacement maze may be a different shape, so re-fit first.
             self.fit()
+            self.animate_generation()
+            return
         self.refresh()
 
     def toggle_path(self) -> None:
-        """Show or hide the solution stripe."""
-        self.show_path = not self.show_path
-        self.refresh()
+        # Reveal or hide the solution.
+        self.path.reverse()
 
     def cycle_palette(self) -> None:
-        """Step to the next colour scheme and redraw."""
-        nxt = (PALETTES.index(self.palette) + 1) % len(PALETTES)
-        self.palette = PALETTES[nxt]
-        self.refresh()
+        # Cross-fade to the next colour scheme.
+        self.fade_from = self.palette
+        self.palette_index = (self.palette_index + 1) % len(PALETTES)
+        self.fade = Tween(FADE_SECONDS)
+
+    def advance_fade(self) -> None:
+        """Recolour everything to the current point of the fade."""
+        if self.fade is None:
+            return
+        target = PALETTES[self.palette_index]
+        if self.fade.done:
+            self.palette, self.fade = target, None
+        else:
+            self.palette = blend(self.fade_from, target, self.fade.eased)
+        self.paint()
 
     def replay(self) -> None:
-        # Replaying maze.steps() as an animation This function requires
-        # animation, which is in further steps in our plan
-        steps = sum(1 for _ in self.maze.steps())
-        print(f"replay: {steps} steps recorded, ano animation yet ;(",
-              flush=True)
+        """Watch the same maze being carved again."""
+        self.animate_generation()
 
     def run(self) -> None:
-        self.paint()
+        self.animate_generation()
         self.m.mlx_expose_hook(self.win, self.on_expose, None)
         self.m.mlx_key_hook(self.win, self.on_key, None)
+        self.m.mlx_loop_hook(self.mlx, self.on_frame, None)
         self.m.mlx_hook(self.win, EVENT_CLIENT_MESSAGE, 0, self.on_close, None)
         self.m.mlx_loop(self.mlx)
         self.m.mlx_destroy_image(self.mlx, self.img)

@@ -4,12 +4,14 @@ Colour schemes for the renderer.
 
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
+
+from app.animation import lerp_color
 
 __all__ = [
     "Palette", "DARK", "LIGHT", "NEON",
     "SPRING", "SUMMER", "AUTUMN", "WINTER",
-    "PALETTES", "DEFAULT",
+    "PALETTES", "DEFAULT", "blend",
 ]
 
 
@@ -125,3 +127,20 @@ PALETTES: tuple[Palette, ...] = (
     DARK, LIGHT, NEON, SPRING, SUMMER, AUTUMN, WINTER,
 )
 DEFAULT = DARK
+
+
+def blend(start: Palette, end: Palette, t: float) -> Palette:
+    """*start* mixed *t* of the way towards *end*.
+
+    The name jumps to the destination straight away, so the legend says
+    where the colours are going rather than where they came from.
+    """
+    return Palette(
+        name=end.name,
+        **{
+            field.name: lerp_color(
+                getattr(start, field.name), getattr(end, field.name), t
+            )
+            for field in fields(start) if field.name != "name"
+        },
+    )
