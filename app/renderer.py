@@ -5,9 +5,11 @@ MLX renderer: draw a generated maze.
 """
 
 from collections.abc import Callable
+from math import ceil
 
 from mlx import Mlx
 
+from app.animation import Clock, Tween
 from app.font import GLYPH_H, GLYPH_W, Font
 from app.keys import ACTIONS, LEGEND
 from app.palette import DEFAULT, PALETTES, Palette
@@ -25,6 +27,14 @@ WALL_S = 4
 WALL_W = 8
 
 EVENT_CLIENT_MESSAGE = 33  # X11 ClientMessage -> WM close button
+
+# MLX calls the loop hook as fast as it can, which is far more often than a
+# repaint is worth. Frames are batched up to this interval instead; the dt
+# still adds up, so animations keep real-time pace either way.
+FRAME = 1.0 / 60.0
+
+# How long the solution takes to draw itself in, entry to exit.
+PATH_SECONDS = 0.8
 
 # The legend is drawn into the frame, so the only cap left is the frame's own
 # width -- mlx_string_put() used to cost one draw call per character, and the
@@ -45,7 +55,14 @@ class Renderer:
         # Build a replacement maze when R is pressed. Without one the
         # renderer still works, it just cannot regenerate.
         self.make_maze = make_maze
-        self.show_path = False
+        # The stripe is a tween rather than a flag, so it can draw itself
+        # in over time instead of appearing all at once.
+        self.path = Tween(PATH_SECONDS)
+        # How many cells of the stripe are on screen, so a frame can
+        # extend it instead of redrawing the whole route.
+        self.path_drawn = 0
+        self.clock = Clock()
+        self._elapsed = 0.0
         self.m = Mlx()
         self.mlx = self.m.mlx_init()
         self.win = self.m.mlx_new_window(self.mlx, WIDTH, HEIGHT, title)
@@ -120,7 +137,7 @@ class Renderer:
                 self.draw_cell(col, row, grid[row][col])
         for cell in self.maze.pattern_cells:
             self.fill_floor(*cell, self.palette.glyph)
-        if self.show_path:
+        if self.path.progress > 0.0:
             self.draw_path()
         # Painted after the path so entry and exit stay their own colours.
         self.fill_floor(*self.maze.entry, self.palette.entry)
@@ -134,21 +151,43 @@ class Renderer:
             self.origin_y + self.wall + row * self.cell + self.cell // 2,
         )
 
+    def path_length(self) -> int:
+        """How many cells of the solution the tween is asking for."""
+        return ceil(self.path.eased * len(self.maze.solution))
+
     def draw_path(self) -> None:
-        """A stripe down the middle of the entry-to-exit route."""
+        """The stripe, drawn as far as the tween has got."""
+        self.path_drawn = self.path_length()
+        self.draw_path_segments(1, self.path_drawn)
+
+    def draw_path_segments(self, first: int, last: int) -> None:
+        """Stripe the route from cell *first* - 1 up to cell *last* - 1.
+
+        One rect per step, centre to centre. Each covers both endpoints,
+        so turns join up without a separate corner piece.
+        """
         path = self.maze.solution
         width = max(2, self.cell // 6)
         half = width // 2
-        # One rect per step, centre to centre. Each covers both endpoints,
-        # so turns join up without a separate corner piece.
-        for before, after in zip(path, path[1:]):
-            ax, ay = self.centre(before)
-            bx, by = self.centre(after)
+        for index in range(first, last):
+            ax, ay = self.centre(path[index - 1])
+            bx, by = self.centre(path[index])
             x, y = min(ax, bx), min(ay, by)
             self.fill_rect(
                 x - half, y - half,
                 abs(bx - ax) + width, abs(by - ay) + width, self.palette.path,
             )
+
+    def advance_path(self) -> None:
+        """Extend the stripe in place to match the tween.
+
+        Only the newly revealed steps are drawn: repainting the whole
+        frame every time would cost ~12ms against 0.02ms for a cell.
+        """
+        want = self.path_length()
+        if want > self.path_drawn:
+            self.draw_path_segments(max(self.path_drawn, 1), want)
+        self.path_drawn = want
 
     def fill_floor(self, col: int, row: int, color: int) -> None:
         """Recolour a cell's floor, leaving its four walls as they are."""
@@ -212,6 +251,9 @@ class Renderer:
             self.origin_y + self.side_h + (MARGIN - GLYPH_H) // 2,
             HEIGHT - GLYPH_H,
         )
+        # The band is wiped first: an animating status redraws this every
+        # frame, and glyphs blended over their own leftovers turn to mush.
+        self.fill_rect(0, y, WIDTH, GLYPH_H, self.palette.bg)
         centred = self.origin_x + (self.side_w - len(text) * GLYPH_W) // 2
         x = max(
             MARGIN // 2,
@@ -221,7 +263,7 @@ class Renderer:
 
     def status(self) -> str:
         """What the view is showing, ahead of the key hints."""
-        path = "on" if self.show_path else "off"
+        path = "on" if self.path.progress > 0.0 else "off"
         return f"{self.cols}x{self.rows} {self.palette.name} path:{path}"
 
     def refresh(self) -> None:
@@ -231,6 +273,36 @@ class Renderer:
 
     def on_expose(self, _param: object) -> None:
         # The first paint has to reach the window from inside the loop.
+        self.show()
+
+    def advance(self, dt: float) -> bool:
+        """Move the running animation on by *dt* seconds.
+
+        Returns True if it ran, which is the same as asking whether the
+        window needs drawing again.
+        """
+        if self.path.done:
+            return False
+        self.path.update(dt)
+        return True
+
+    def on_frame(self, _param: object) -> None:
+        """Advance the animations. Must return promptly, every time.
+
+        Sleeping in here would freeze the window and swallow key events,
+        so an idle frame does nothing but read the clock.
+        """
+        self._elapsed += self.clock.tick()
+        if self._elapsed < FRAME:
+            return
+        dt, self._elapsed = self._elapsed, 0.0
+        if not self.advance(dt):
+            return
+        self.advance_path()
+        # The stripe patched the cells it touched, so the rest of the
+        # frame still stands: only the legend and the blit are left.
+        self.draw_legend()
+        self.buf[:] = self.frame
         self.show()
 
     def on_close(self, _param: object) -> None:
@@ -258,7 +330,7 @@ class Renderer:
 
     def toggle_path(self) -> None:
         """Show or hide the solution stripe."""
-        self.show_path = not self.show_path
+        self.path.progress = 0.0 if self.path.progress > 0.0 else 1.0
         self.refresh()
 
     def cycle_palette(self) -> None:
@@ -278,6 +350,7 @@ class Renderer:
         self.paint()
         self.m.mlx_expose_hook(self.win, self.on_expose, None)
         self.m.mlx_key_hook(self.win, self.on_key, None)
+        self.m.mlx_loop_hook(self.mlx, self.on_frame, None)
         self.m.mlx_hook(self.win, EVENT_CLIENT_MESSAGE, 0, self.on_close, None)
         self.m.mlx_loop(self.mlx)
         self.m.mlx_destroy_image(self.mlx, self.img)
