@@ -55,11 +55,11 @@ class Renderer:
         # Build a replacement maze when R is pressed. Without one the
         # renderer still works, it just cannot regenerate.
         self.make_maze = make_maze
-        # The stripe is a tween rather than a flag, so it can draw itself
-        # in over time instead of appearing all at once.
-        self.path = Tween(PATH_SECONDS)
+        # The stripe is a tween rather than a flag: hidden at 0, shown at
+        # 1, and reversible from wherever it happens to be.
+        self.path = Tween(PATH_SECONDS, progress=0.0, forward=False)
         # How many cells of the stripe are on screen, so a frame can
-        # extend it instead of redrawing the whole route.
+        # extend or trim it instead of redrawing the whole route.
         self.path_drawn = 0
         self.clock = Clock()
         self._elapsed = 0.0
@@ -143,6 +143,17 @@ class Renderer:
         self.fill_floor(*self.maze.entry, self.palette.entry)
         self.fill_floor(*self.maze.exit, self.palette.exit)
 
+    def repaint_cell(self, cell: Coord) -> None:
+        """Redraw one cell in place, erasing anything drawn over it."""
+        col, row = cell
+        self.draw_cell(col, row, self.maze.grid[row][col])
+        if cell in self.maze.pattern_cells:
+            self.fill_floor(col, row, self.palette.glyph)
+        elif cell == self.maze.entry:
+            self.fill_floor(col, row, self.palette.entry)
+        elif cell == self.maze.exit:
+            self.fill_floor(col, row, self.palette.exit)
+
     def centre(self, cell: Coord) -> Coord:
         """Pixel centre of a cell."""
         col, row = cell
@@ -179,14 +190,16 @@ class Renderer:
             )
 
     def advance_path(self) -> None:
-        """Extend the stripe in place to match the tween.
-
-        Only the newly revealed steps are drawn: repainting the whole
-        frame every time would cost ~12ms against 0.02ms for a cell.
-        """
+        """Extend or trim the stripe in place to match the tween."""
         want = self.path_length()
         if want > self.path_drawn:
+            # Only the newly revealed steps -- the rest is already drawn.
             self.draw_path_segments(max(self.path_drawn, 1), want)
+        elif want < self.path_drawn:
+            # Cells tile the grid exactly, so repainting the ones that
+            # lost the stripe erases it, gap between cells included.
+            for cell in self.maze.solution[want:self.path_drawn]:
+                self.repaint_cell(cell)
         self.path_drawn = want
 
     def fill_floor(self, col: int, row: int, color: int) -> None:
@@ -263,7 +276,7 @@ class Renderer:
 
     def status(self) -> str:
         """What the view is showing, ahead of the key hints."""
-        path = "on" if self.path.progress > 0.0 else "off"
+        path = "on" if self.path.forward else "off"
         return f"{self.cols}x{self.rows} {self.palette.name} path:{path}"
 
     def refresh(self) -> None:
@@ -329,9 +342,13 @@ class Renderer:
         self.refresh()
 
     def toggle_path(self) -> None:
-        """Show or hide the solution stripe."""
-        self.path.progress = 0.0 if self.path.progress > 0.0 else 1.0
-        self.refresh()
+        """Reveal or hide the solution.
+
+        Reverses from the current progress rather than restarting, so a
+        toggle pressed mid-reveal folds the stripe back from where it
+        actually is instead of snapping to the far end first.
+        """
+        self.path.reverse()
 
     def cycle_palette(self) -> None:
         """Step to the next colour scheme and redraw."""
