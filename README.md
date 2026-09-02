@@ -534,7 +534,101 @@ API, the wall-bit convention, the step-event stream — plus J's stub
 generator meant the renderer was never blocked. The 42 glyph colouring
 was the only task that waited on the other half, and only for two days.
 
-<!-- TODO (J): planned vs actual for the library half. -->
+### Planned vs actual — J (`jkarl`)
+
+`PROJECT_PLAN.md` budgeted ~43h across ~10 working days for the library half.
+Actual: **7 active days, 24 commits, spread over 15 calendar days**
+(11–25 Aug). The effort estimate held; the calendar did not.
+
+Project days below are J's active days, not calendar days:
+D1 = 11 Aug · D2 = 14 · D3 = 16 · D4 = 17 · D5 = 18 · D6 = 19 · D7 = 25.
+D2 and D4 are single housekeeping commits, but they are counted, because
+skipping them would make every later row look further ahead than it was.
+
+| # | Task | Planned | Actual | Δ |
+|---|---|---|---|---|
+| J1 | Stub generator meeting the §4 contract | D1 | D1 (11 Aug) | on time |
+| J2 | Edge-set model + mask serialization | D2–4 | D1 (11 Aug) | −1 |
+| J7 | Border walls + entry/exit validation | D2–4 | D1 (11 Aug) | −1 |
+| J3 | Union-find + `kruskal()` | D2–4 | D3 (16 Aug) | on time |
+| J9 | BFS solver → coords + move string | D2–4 | D3 (16 Aug) | on time |
+| J4 | Iterative `dfs()` | D5–7 | D3 (16 Aug) | −2 |
+| J5 | Step-event recording for both algorithms | D5–7 | D3 (16 Aug) | −2 |
+| J6 | `pattern.py` — "42" mask, size and connectivity checks | D5–7 | D3 (16 Aug) | −2 |
+| J10 | Seeded determinism, one RNG threaded through | D5–7 | D3 (16 Aug) | −2 |
+| J8 | Braiding for `PERFECT=FALSE` + the 3x3 guard | D5–7 | D5 (18 Aug) | on time |
+| J11 | `app/writer.py` — hex rows + metadata block | D2–4 | D5 (18 Aug) | +1 |
+| J12 | Package: `pyproject.toml`, wheel build, clean-venv install | D8–9 | D6 (19 Aug) | −2 |
+| J13 | `mazegen/usage.md` | D8–9 | D6 (19 Aug) | −2 |
+| J14 | pytest invariant suite | D8–9 | D7 (25 Aug) | −1 |
+| J15 | README — algorithms, reusable module | D8–9 | D7 (25 Aug) | −1 |
+| — | Build and tooling: Makefile, deps, `.gitignore`, `uv.lock` | not in the plan | D1–D6, throughout | unplanned |
+
+**Gates.** The Phase 0 gate — J's stub imports cleanly — was met on D1, as
+planned. J's half of the Phase 1 gate came apart in two: correct mazes on D3
+(16 Aug), but the valid output file only on D5 (18 Aug), one day past the
+planned D4. The Phase 2 gate — DFS, step events, the 42 glyph, braiding, the
+3x3 guard, `PERFECT` and seed plumbing — was complete on D5 (18 Aug) against
+a planned D7. The Phase 3 gate (the wheel installs into a fresh virtualenv
+and `from mazegen import MazeGenerator` works from an unrelated directory)
+was met on D6 (19 Aug), two ahead of plan; the other Phase 3 item on J's
+list, a green test suite, waited until D7 (25 Aug). Phase 4 is a reading day
+and leaves no commits, so the history is silent on it.
+
+**Where the plan was wrong.**
+
+- **The library landed in one commit.** J2–J6, J9 and J10 — seven rows and
+  about 22h of estimate — are a single commit on 16 Aug. Splitting them
+  across seven plan rows implied checkpoints between them that never
+  existed: the edge set, both algorithms, the step stream, the glyph and the
+  solver were one design carried through in one sitting, largely because
+  §7.1–§7.4 had already settled the hard questions on day one. The cost is
+  that there was no intermediate state to hand over — until 16 Aug, A had
+  the stub and nothing else, and the day the library existed it existed
+  whole.
+- **The writer was scheduled as a small row and was actually the Phase 1
+  gate.** `app/writer.py` is 3h in the plan with no day attached, but the
+  Phase 1 gate demands a valid output file by D4 and §7.9 says to run the
+  subject's validation script "as soon as J11 exists — do not save it for
+  Phase 3". It landed on 18 Aug, two days after the mazes themselves were
+  correct, so for two days there were correct mazes that nothing could check
+  against the required format.
+- **Build and tooling were never in the estimate.** The layout in §3 assigns
+  `Makefile` and `.gitignore` to A and `pyproject.toml` to "shared"; in
+  practice J wrote the initial Makefile and `config.txt` on D1 and owned
+  every build change afterwards — dependencies and the MLX wheel (16 Aug),
+  the clean rule and the output file's gitignore entry (18 Aug), the
+  `uv.lock` question twice (14 and 18 Aug), and the `build` target plus the
+  package's own venv (19 Aug). Roughly a fifth of J's commits, none of them
+  in the 43h. The same gap is why the wheel is `mazegen-0.1.0` rather than
+  the `1.0.0` the §10 checklist names: the checklist picked a version before
+  anyone had decided to build one.
+- **The tests were scheduled after the code and stayed there.** J14 is the
+  largest single row in the plan, and its note says "this is where the bugs
+  actually are" — yet Phase 3 puts it after everything it tests. It landed
+  on 25 Aug, six calendar days after the last library commit and a day after
+  A had finished. The commit adds test files and changes no library code, so
+  nothing was found late; that is the design holding rather than the
+  schedule working. Written alongside J3–J6 the invariants would have been a
+  design check. Written at the end they could only be a receipt.
+- **The day-number axis was the wrong one.** J used 7 active days spread
+  over 15, with the library finished on 19 Aug and the last two rows waiting
+  until 25 Aug. Every Phase 3 task is therefore *early* by day index and
+  *late* by date at the same time, which is the clearest sign that numbering
+  ten consecutive working days was not how this project was ever going to
+  run.
+
+**What worked.** The §4.2 stub, 2h on day one, did exactly what the plan
+claimed it would: A wired `a_maze_ing.py` to `mazegen` at 00:02 on 16 Aug
+and had a non-hardcoded grid on screen the evening before that — both ahead
+of the real generator, which landed at 12:21 on 16 Aug. A was never blocked.
+Choosing the edge-set representation in the stub rather than after the fact
+paid off in the same way: no commit in this history fixes a wall-coherence
+bug, a disconnected maze or a 3x3 violation, because those bugs were removed
+by construction in §7.1–§7.3 instead of found later. And the two rebalance
+valves agreed in §5 — J takes `config.py`, or A takes `writer.py` and the
+README assembly — were never needed; the only crossing of the seam in either
+direction was a one-line type change in `app/config.py`.
 
 **Tools used:** uv, flake8, mypy, pytest, MiniLibX, git.
 
