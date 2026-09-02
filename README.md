@@ -474,8 +474,67 @@ the step-event stream — so that both halves could be built in parallel. A
 stub generator satisfying that contract existed on day one, which is what
 kept the renderer from ever being blocked on the algorithms.
 
-<!-- TODO (both): planned vs actual schedule, what worked, what to
-     improve. -->
+### Planned vs actual — A (`aselezen`)
+
+`PROJECT_PLAN.md` budgeted ~42h across ~10 working days for the app half.
+Actual: **9 active days, 55 commits, spread over 14 calendar days**
+(11–24 Aug). The effort estimate held; the calendar did not.
+
+Project days below are A's active days, not calendar days:
+D1 = 11 Aug · D2 = 13 · D3 = 14 · D4 = 15 · D5 = 16 · D6 = 18 · D7 = 22 ·
+D8 = 23 · D9 = 24.
+
+| # | Task | Planned | Actual | Δ |
+|---|---|---|---|---|
+| A1 | MLX spike — build, window, rectangle | D1 | D2 (13 Aug) | +1 |
+| A10 | `config.py` — parser, validation, messages | D2–4 | D1 (11 Aug) | −1 |
+| A2 | Framebuffer renderer — cells, walls, entry, exit | D2–4 | D3–4 (14–15 Aug) | on time |
+| A3 | Geometry — fit any size, dynamic wall thickness | D2–4 | D4 (15 Aug) | on time |
+| A11 | `a_maze_ing.py` — argv, wiring, exit codes | D8–9 | D5 (16 Aug) | −3 |
+| A9 | Key hooks, `keys.py`, on-screen legend | D2–7 | D5 (16 Aug) | on time |
+| A7a | Path reveal — static draw on `p` | D5–7 | D5 (16 Aug) | on time |
+| A2b | 42 glyph colouring | D2–4 | D6 (18 Aug) | +2 |
+| A4 | `palette.py` — 6 schemes, distinct 42 colour | D5–7 | D6 (18 Aug) | on time |
+| A5 | `animation.py` — `Clock`, `Tween`, `EventStream`, easing | D5–7 | D9 (24 Aug) | +2 |
+| A6 | Generation animation over J's step stream | D5–7 | D9 (24 Aug) | +2 |
+| A7b | Path animation, reversible mid-flight | D5–7 | D9 (24 Aug) | +2 |
+| A8 | Palette cross-fade | D5–7 | D9 (24 Aug) | +2 |
+| A12 | Config and CLI error-path tests | D8–9 | D9 (24 Aug) | on time |
+| A13 | README — app sections | D8–9 | D9 (24 Aug) | on time |
+
+**Gates.** The Phase 1 gate (window shows a real maze from a real config)
+was met on D5, one day past the planned D4. The Phase 2 gate (every
+mandatory feature working, both algorithms visibly different when
+animated) was met on D9 against a planned D7.
+
+**Where the plan was wrong.**
+
+- **Order flipped on day one.** The plan called for the MLX spike first,
+  since it was named the top project risk. `config.py` got written first
+  instead — it needed no unknowns. The spike then took two calendar days,
+  which is roughly what the plan feared, so the risk call was right even
+  though the sequencing was not.
+- **Static rendering ran ahead.** D3–D5 covered A2, A3, A9, A11 and a
+  static path — the whole Phase 1 scope plus part of Phase 2. Most of it
+  landed in one long session on the night of 15–16 Aug (23:01 → 07:41).
+  Wiring `a_maze_ing.py` three days early is what made everything after
+  it testable end to end.
+- **The animation stack slipped as a block.** A5–A8 were planned for
+  D5–7 and all landed on D9. They share `Clock` and the loop hook, so
+  none of them could ship before that engine existed — splitting them
+  across four plan rows implied an independence they never had. They were
+  rebased into one push, so the commit timestamps inside that batch are
+  all identical and say nothing about the real order.
+- **19–21 Aug is missing entirely.** Not a slip in effort, a gap in
+  calendar. The plan's day numbers assumed consecutive working days and
+  nothing in it flagged what happens when they are not.
+
+**What worked.** The written contract from day one — the `MazeGenerator`
+API, the wall-bit convention, the step-event stream — plus J's stub
+generator meant the renderer was never blocked. The 42 glyph colouring
+was the only task that waited on the other half, and only for two days.
+
+<!-- TODO (J): planned vs actual for the library half. -->
 
 **Tools used:** uv, flake8, mypy, pytest, MiniLibX, git.
 
