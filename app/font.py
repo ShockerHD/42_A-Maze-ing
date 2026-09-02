@@ -1,9 +1,4 @@
-"""
-
-The font sheet the renderer draws its text with.
-
-
-"""
+# The font sheet the renderer draws its text with.
 
 from pathlib import Path
 from typing import Any
@@ -14,13 +9,13 @@ SHEET = Path(__file__).resolve().parent.parent / "assets" / "font.png"
 
 GLYPH_W = 10
 GLYPH_H = 20
-SLOT_W = 12  # the cell a glyph sits in, wider than the glyph itself
+SLOT_W = 12  # the cell a glyph sits in, wider than the glyph
 
-FIRST = 32  # the sheet starts at space
-COUNT = 95  # ... and runs to '~'
-FALLBACK = ord("?")  # what stands in for anything that is not on the sheet
+FIRST = 32  # sheet starts at space
+COUNT = 95  # and runs to '~'
+FALLBACK = ord("?")  # used for anything not on the sheet
 
-INK = 0  # the sheet is grey, so any colour byte of a pixel will do
+INK = 0  # sheet is grey, so any colour byte will do
 
 
 class Font:
@@ -36,7 +31,7 @@ class Font:
         self.masks = [
             cut(sheet, size_line, px_bytes, index) for index in range(COUNT)
         ]
-        # The masks are plain bytes now, so the image itself can go.
+        # masks are plain bytes now, so the image can go
         m.mlx_destroy_image(mlx, img)
 
     def coverage(self, char: str) -> bytes:

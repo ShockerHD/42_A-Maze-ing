@@ -1,8 +1,4 @@
-"""
-
-Format and write maze data to output file
-
-"""
+# Format the maze and write it to the output file.
 
 from mazegen.generator import MazeGenerator
 

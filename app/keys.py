@@ -1,8 +1,4 @@
-"""
-
-Key bindings for the renderer.
-
-"""
+# Key bindings for the renderer.
 
 __all__ = ["ACTIONS", "LEGEND"]
 
@@ -13,7 +9,7 @@ KEY_P = 112
 KEY_Q = 113
 KEY_R = 114
 
-# keysym -> name of the Renderer method to call.
+# keysym -> name of the Renderer method to call
 ACTIONS: dict[int, str] = {
     KEY_ESC: "quit",
     KEY_Q: "quit",
@@ -23,8 +19,8 @@ ACTIONS: dict[int, str] = {
     KEY_SPACE: "replay",
 }
 
-# What the on-screen legend spells out, in the order it is shown. Kept next
-# to ACTIONS so a new binding and its hint are added in one place.
+# What the legend shows, in order. Next to ACTIONS so a new key and its
+# hint get added in one place.
 LEGEND: tuple[tuple[str, str], ...] = (
     ("R", "regen"),
     ("P", "path"),

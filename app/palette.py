@@ -1,8 +1,4 @@
-"""
-
-Colour schemes for the renderer.
-
-"""
+# Colour schemes for the renderer.
 
 from dataclasses import dataclass, fields
 
@@ -17,7 +13,7 @@ __all__ = [
 
 @dataclass(frozen=True)
 class Palette:
-    """One colour scheme. Every element on screen takes its colour here."""
+    # one colour scheme: every element on screen picks its colour here
 
     name: str
     bg: int
@@ -66,9 +62,8 @@ NEON = Palette(
     legend=0xFF00F5FF,
 )
 
-# The seasonal schemes come from ColorHunt, four colours each. Those four
-# take the visible roles (walls, entry, exit, path); background, floor and
-# legend are darker or lighter shades derived from them.
+# Seasonal schemes come from ColorHunt, four colours each. Those four take
+# the visible roles; bg, floor and legend are shades derived from them.
 
 # colorhunt.co/palette/8b2626ef6905f1e5a1486c2f
 AUTUMN = Palette(
@@ -122,7 +117,7 @@ WINTER = Palette(
     legend=0xFF9FB4C4,
 )
 
-# Cycling order for the C key.
+# cycling order for the C key
 PALETTES: tuple[Palette, ...] = (
     DARK, LIGHT, NEON, SPRING, SUMMER, AUTUMN, WINTER,
 )
@@ -130,11 +125,8 @@ DEFAULT = DARK
 
 
 def blend(start: Palette, end: Palette, t: float) -> Palette:
-    """*start* mixed *t* of the way towards *end*.
-
-    The name jumps to the destination straight away, so the legend says
-    where the colours are going rather than where they came from.
-    """
+    # start mixed t of the way towards end. The name jumps straight to the
+    # destination so the legend says where the colours are going.
     return Palette(
         name=end.name,
         **{

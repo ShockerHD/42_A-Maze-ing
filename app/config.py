@@ -10,7 +10,7 @@ Coord = tuple[int, int]
 
 
 class MazeConfig(BaseModel):
-    """A validated maze configuration."""
+    # the config file, validated
 
     model_config = {
         "extra": "ignore",
@@ -33,7 +33,7 @@ class MazeConfig(BaseModel):
     @field_validator("entry", "exit", mode="before")
     @classmethod
     def _parse_coord(cls, value: Any) -> Any:
-        """Turn an ``"x,y"`` string into an ``(x, y)`` tuple."""
+        # turn an "x,y" string into an (x, y) tuple
         if not isinstance(value, str):
             return value
         parts = value.split(",")
@@ -44,12 +44,12 @@ class MazeConfig(BaseModel):
     @field_validator("algorithm", mode="before")
     @classmethod
     def _normalise_algorithm(cls, value: Any) -> Any:
-        """Accept ``DFS``, ``Dfs`` and friends."""
+        # accept DFS, Dfs and friends
         return value.lower() if isinstance(value, str) else value
 
     @model_validator(mode="after")
     def _check_cells(self) -> "MazeConfig":
-        """Entry and exit must be distinct cells inside the grid."""
+        # entry and exit must be different cells inside the grid
         for name, (x, y) in (("ENTRY", self.entry), ("EXIT", self.exit)):
             if not (0 <= x < self.width and 0 <= y < self.height):
                 raise ValueError(
@@ -67,7 +67,7 @@ _KNOWN_KEYS = frozenset(
 
 
 def load_config(path: str | Path) -> MazeConfig:
-    """Read and validate the configuration file at *path*."""
+    # read and validate the config file at path
     path = Path(path)
     pairs: dict[str, str] = {}
     with path.open(encoding="utf-8") as handle:
